@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.markdownvault.hgqkzp"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = (project.findProperty("app.version.code") as? String)?.toInt() ?: 1
+    versionName = (project.findProperty("app.version.name") as? String) ?: "0.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
