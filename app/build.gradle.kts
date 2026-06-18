@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -22,11 +24,23 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+      val envProperties = Properties().apply {
+        val envFile = rootProject.file(".env")
+        if (envFile.exists()) {
+          envFile.inputStream().use { load(it) }
+        }
+      }
+      val keystorePath = System.getenv("KEYSTORE_PATH")
+        ?: envProperties.getProperty("KEYSTORE_PATH")
+        ?: "${rootDir}/markdown-vault.jks"
       storeFile = file(keystorePath)
       storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
+        ?: envProperties.getProperty("RELEASE_STORE_PASSWORD")
+        ?: envProperties.getProperty("STORE_PASSWORD")
+      keyAlias = envProperties.getProperty("RELEASE_KEY_ALIAS") ?: "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
+        ?: envProperties.getProperty("RELEASE_KEY_PASSWORD")
+        ?: envProperties.getProperty("KEY_PASSWORD")
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
