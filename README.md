@@ -78,3 +78,27 @@ If you encounter caching issues or want to perform a fresh compilation:
 ```bash
 ./gradlew clean
 ```
+
+---
+
+## CI/CD and Production Releases (GitHub Actions)
+
+This project includes a pre-configured GitHub Actions workflow at [.github/workflows/android.yml](.github/workflows/android.yml) that automates the building, testing, and distribution of your APKs.
+
+### How it Works:
+1. **On PRs & Pushes to `main`**: Automatically compiles the application to ensure it builds correctly. If signing keys are not configured, it compiles a debug APK and uploads it to GitHub Actions run artifacts.
+2. **On Git Tags (e.g. `v1.0.0`)**: Builds the APK and publishes it automatically as an asset on a new GitHub Release.
+
+### Setting up Production Release Signing in CI/CD:
+To generate signed release APKs in GitHub Actions, configure the following secrets in your GitHub repository (**Settings > Secrets and variables > Actions**):
+
+1. **`RELEASE_KEYSTORE_BASE64`**: The base64-encoded string of your production `.keystore` or `.jks` file.
+   * Generate it locally:
+     ```bash
+     base64 -i my-upload-key.jks | pbcopy   # macOS
+     base64 -w 0 my-upload-key.jks          # Linux
+     ```
+2. **`RELEASE_STORE_PASSWORD`**: Password to access the keystore container.
+3. **`RELEASE_KEY_PASSWORD`**: Password to access the specific key alias.
+4. **`GEMINI_API_KEY`**: Your production API Key (will be packaged securely using the Secrets Gradle Plugin).
+
