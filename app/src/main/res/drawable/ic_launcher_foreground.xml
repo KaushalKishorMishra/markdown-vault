@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Base Notebook Canvas -->
+    <path
+        android:fillColor="#1E293B"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round"
+        android:pathData="M34,30 h40 c3,0 4,1 4,4 v40 c0,3 -1,4 -4,4 h-40 c-3,0 -4,-1 -4,-4 v-40 c0,-3 1,-4 4,-4 Z" />
+
+    <!-- Notebook Binder Rings (Left Hand Side) -->
+    <path
+        android:strokeColor="#cbd5e1"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M27,36 h6 M27,48 h6 M27,60 h6 M27,72 h6" />
+
+    <!-- Markdown Horizontal Text Indicator Lines -->
+    <path
+        android:strokeColor="#64748B"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M42,42 h20 M42,50 h14" />
+
+    <!-- GitHub Checkmark / Success Emblem inside Ring -->
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M42,66 l4,4 l10,-10" />
+</vector>
