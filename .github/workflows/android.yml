@@ -16,6 +16,11 @@ on:
         description: 'Version Code (e.g. 2). If empty, code is incremented by 1.'
         required: false
         default: ''
+      create_release:
+        description: 'Create a GitHub Release for this build (APK will be uploaded as asset)'
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: write
@@ -110,11 +115,12 @@ jobs:
         path: "${{ steps.locate_artifacts.outputs.apk_path }}"
 
     - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/v')
+      if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release == true
       uses: softprops/action-gh-release@v2
       with:
         files: "${{ steps.locate_artifacts.outputs.apk_path }}"
+        tag_name: "v${{ steps.bump_version.outputs.new_version_name }}"
+        name: "Release v${{ steps.bump_version.outputs.new_version_name }}"
         draft: false
         prerelease: false
-      env:
-        GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        token: "${{ secrets.GITHUB_TOKEN }}"
