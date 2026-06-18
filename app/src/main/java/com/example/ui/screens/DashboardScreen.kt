@@ -41,6 +41,9 @@ import com.example.ui.components.MathView
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.VaultViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import coil.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -277,7 +280,18 @@ fun DashboardScreen(
     }
 
     if (showAddNoteDialog) {
+        val existingFolders = remember(notes) {
+            notes.map { note ->
+                if (note.filePath.contains("/")) note.filePath.substringBeforeLast("/") else ""
+            }.filter { it.isNotEmpty() }.distinct().sorted()
+        }
+        val defaultPrefix = when (activeVault?.vaultType) {
+            "LOGSEQ" -> "pages/"
+            else -> ""
+        }
         AddNoteDialog(
+            existingFolders = existingFolders,
+            defaultPrefix = defaultPrefix,
             onDismiss = { showAddNoteDialog = false },
             onConfirm = { title, path ->
                 viewModel.createNote(title, path)
@@ -287,12 +301,24 @@ fun DashboardScreen(
     }
 
     if (showGitConfigDialog) {
+        val gitName by viewModel.gitName.collectAsStateWithLifecycle()
+        val gitEmail by viewModel.gitEmail.collectAsStateWithLifecycle()
+        val gitAvatarUrl by viewModel.gitAvatarUrl.collectAsStateWithLifecycle()
+        val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
+
         GitCredentialsDialog(
             currentUsername = gitUser,
             currentToken = gitToken,
+            currentName = gitName,
+            currentEmail = gitEmail,
+            currentAvatarUrl = gitAvatarUrl,
             isBackgroundSyncEnabled = isBackgroundSyncEnabled,
             onToggleBackgroundSync = { enabled ->
                 viewModel.toggleBackgroundSync(enabled)
+            },
+            selectedTheme = selectedTheme,
+            onSelectTheme = { theme ->
+                viewModel.selectTheme(theme)
             },
             onDismiss = { showGitConfigDialog = false },
             onConfirm = { user, token ->
@@ -302,6 +328,9 @@ fun DashboardScreen(
             onClear = {
                 viewModel.clearGitCredentials()
                 showGitConfigDialog = false
+            },
+            onCheckStatus = { user, token ->
+                viewModel.syncEngine.testConnection(user, token)
             }
         )
     }
@@ -348,6 +377,20 @@ fun SidebarContent(
     modifier: Modifier = Modifier
 ) {
     var isVaultDropdownExpanded by remember { mutableStateOf(false) }
+
+    val groupedNotes = remember(notes) {
+        notes.groupBy { note ->
+            if (note.filePath.contains("/")) {
+                note.filePath.substringBeforeLast("/")
+            } else {
+                ""
+            }
+        }
+    }
+    var expandedFolders by remember { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(groupedNotes) {
+        expandedFolders = groupedNotes.keys.toSet()
+    }
 
     Column(
         modifier = modifier
@@ -655,51 +698,151 @@ fun SidebarContent(
                         }
                     }
                 } else {
-                    items(notes) { note ->
-                        val isSelected = selectedNote?.id == note.id
-                        val syncColor = when (note.syncStatus) {
-                            "SYNCED" -> Emerald500
-                            "MODIFIED" -> Sky400
-                            "CONFLICT" -> Amber500
-                            "LOCAL_ONLY" -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                        
-                        Surface(
-                            onClick = { onNoteSelect(note) },
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                            ) {
-                                // Mini sync dot decoration
-                                Box(
+                    groupedNotes.forEach { (folderPath, folderNotes) ->
+                        if (folderPath.isNotEmpty()) {
+                            val isExpanded = expandedFolders.contains(folderPath)
+                            item(key = "dir:$folderPath") {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(syncColor)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = note.title,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            expandedFolders = if (isExpanded) {
+                                                expandedFolders - folderPath
+                                            } else {
+                                                expandedFolders + folderPath
+                                            }
+                                        }
+                                        .padding(vertical = 6.dp, horizontal = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
                                     )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Folder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = note.filePath,
+                                        text = folderPath,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = "${folderNotes.size}",
                                         fontSize = 10.sp,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.padding(end = 4.dp)
                                     )
+                                }
+                            }
+                            if (isExpanded) {
+                                items(folderNotes, key = { it.id }) { note ->
+                                    Row(modifier = Modifier.fillMaxWidth()) {
+                                        Spacer(modifier = Modifier.width(20.dp)) // Indent files inside folder
+                                        val isSelected = selectedNote?.id == note.id
+                                        val syncColor = when (note.syncStatus) {
+                                            "SYNCED" -> Emerald500
+                                            "MODIFIED" -> Sky400
+                                            "CONFLICT" -> Amber500
+                                            "LOCAL_ONLY" -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                        Surface(
+                                            onClick = { onNoteSelect(note) },
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(7.dp)
+                                                        .clip(RoundedCornerShape(3.dp))
+                                                        .background(syncColor)
+                                                )
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = note.title,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Text(
+                                                        text = note.filePath.substringAfterLast("/"),
+                                                        fontSize = 10.sp,
+                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Root files
+                            items(folderNotes, key = { it.id }) { note ->
+                                val isSelected = selectedNote?.id == note.id
+                                val syncColor = when (note.syncStatus) {
+                                    "SYNCED" -> Emerald500
+                                    "MODIFIED" -> Sky400
+                                    "CONFLICT" -> Amber500
+                                    "LOCAL_ONLY" -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                                Surface(
+                                    onClick = { onNoteSelect(note) },
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                                    border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(syncColor)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = note.title,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = note.filePath,
+                                                fontSize = 10.sp,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1647,41 +1790,153 @@ fun ConflictResolver(
 
 // --- Credentials Dialog ---
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GitCredentialsDialog(
     currentUsername: String,
     currentToken: String,
+    currentName: String,
+    currentEmail: String,
+    currentAvatarUrl: String,
     isBackgroundSyncEnabled: Boolean,
     onToggleBackgroundSync: (Boolean) -> Unit,
+    selectedTheme: String,
+    onSelectTheme: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onCheckStatus: suspend (String, String) -> Boolean
 ) {
     var user by remember { mutableStateOf(currentUsername) }
     var token by remember { mutableStateOf(currentToken) }
+
+    val coroutineScope = rememberCoroutineScope()
+    var connectionStatus by remember { mutableStateOf(if (currentToken.isNotEmpty()) "Configured" else "Unconfigured") }
+    var isChecking by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("Secure GitHub Sync Credentials")
+                Text("Workspace & Git Settings")
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // User Profile Section
+                if (currentToken.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(12.dp)
+                    ) {
+                        if (currentAvatarUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = currentAvatarUrl,
+                                contentDescription = "GitHub Avatar",
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .border(2.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val initials = (currentName.ifEmpty { currentUsername }).take(2).uppercase()
+                                Text(
+                                    text = initials,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = currentName.ifEmpty { currentUsername },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (currentEmail.isNotEmpty()) {
+                                Text(
+                                    text = currentEmail,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = "@$currentUsername",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                // Theme Selection Section
                 Text(
-                    text = "Provide your GitHub username and Personal Access Token (PAT). Token is stored in hardware-backed secure storage with AES-256 local-encryption E2EE format.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "Color Themes".uppercase(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    letterSpacing = 1.sp
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val themes = listOf(
+                        "ARTISTIC" to "Artistic Dark",
+                        "CYBERPUNK" to "Neon Cyber",
+                        "EMERALD" to "Sage Forest",
+                        "CLASSIC" to "Warm Amber",
+                        "LIGHT" to "Lavender Light"
+                    )
+                    items(themes) { (themeKey, themeLabel) ->
+                        val isSelected = selectedTheme == themeKey
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onSelectTheme(themeKey) },
+                            label = { Text(themeLabel, fontSize = 10.sp) },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+                // GitHub Credentials Section
+                Text(
+                    text = "GitHub Authentication".uppercase(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    letterSpacing = 1.sp
                 )
                 OutlinedTextField(
                     value = user,
                     onValueChange = { user = it },
                     label = { Text("GitHub Username") },
                     shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = token,
@@ -1689,11 +1944,63 @@ fun GitCredentialsDialog(
                     label = { Text("Personal Access Token (PAT)") },
                     visualTransformation = PasswordVisualTransformation(),
                     shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                isChecking = true
+                                val success = onCheckStatus(user, token)
+                                connectionStatus = if (success) "Active & Valid" else "Connection Failed"
+                                isChecking = false
+                            }
+                        },
+                        enabled = !isChecking && user.isNotEmpty() && token.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (isChecking) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.5.dp)
+                        } else {
+                            Text("Check Connection", fontSize = 11.sp)
+                        }
+                    }
 
+                    // Connection status badge
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                when (connectionStatus) {
+                                    "Active & Valid" -> Emerald500.copy(alpha = 0.2f)
+                                    "Connection Failed" -> MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
+                                    else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                }
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = connectionStatus.uppercase(),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when (connectionStatus) {
+                                "Active & Valid" -> Emerald500
+                                "Connection Failed" -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+                // Settings Switch Section
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1703,12 +2010,12 @@ fun GitCredentialsDialog(
                         Text(
                             text = "Automatic Background Sync",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Auto-sync vaults periodically in background on connection",
-                            fontSize = 11.sp,
+                            text = "Auto-sync vaults periodically on connection",
+                            fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -1724,7 +2031,7 @@ fun GitCredentialsDialog(
                 onClick = { onConfirm(user, token) },
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Save Credentials")
+                Text("Save Changes")
             }
         },
         dismissButton = {
@@ -1738,7 +2045,7 @@ fun GitCredentialsDialog(
                     }
                 }
                 TextButton(onClick = onDismiss) {
-                    Text("Discard")
+                    Text("Close")
                 }
             }
         }
@@ -1852,40 +2159,74 @@ fun AddVaultDialog(
 
 // --- Add Note Dialog ---
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddNoteDialog(
+    existingFolders: List<String>,
+    defaultPrefix: String,
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
-    var customPath by remember { mutableStateOf("") }
+    var selectedFolder by remember { mutableStateOf(defaultPrefix) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add Note to Vault") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     label = { Text("Note Title") },
                     placeholder = { Text("e.g. Project Specs") },
                     shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = customPath,
-                    onValueChange = { customPath = it },
-                    label = { Text("Custom File Path (Optional)") },
-                    placeholder = { Text("e.g. pages/draft.md") },
+                    value = selectedFolder,
+                    onValueChange = { selectedFolder = it },
+                    label = { Text("Folder Location") },
+                    placeholder = { Text("e.g. pages/ or logs/weekly/") },
                     shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    modifier = Modifier.fillMaxWidth()
                 )
+
+                if (existingFolders.isNotEmpty()) {
+                    Text(
+                        text = "Existing Folders:".uppercase(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        letterSpacing = 0.5.sp
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(existingFolders) { folder ->
+                            val cleanFolder = if (folder.endsWith("/")) folder else "$folder/"
+                            FilterChip(
+                                selected = selectedFolder == cleanFolder,
+                                onClick = { selectedFolder = cleanFolder },
+                                label = { Text(cleanFolder, fontSize = 10.sp) },
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { if (title.isNotEmpty()) onConfirm(title, customPath) },
+                onClick = {
+                    if (title.isNotEmpty()) {
+                        val finalFolder = if (selectedFolder.isNotEmpty() && !selectedFolder.endsWith("/")) "$selectedFolder/" else selectedFolder
+                        val formattedFileName = title.trim().lowercase().replace(" ", "_").replace("/", "_") + ".md"
+                        val finalPath = "$finalFolder$formattedFileName"
+                        onConfirm(title, finalPath)
+                    }
+                },
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text("Create File")

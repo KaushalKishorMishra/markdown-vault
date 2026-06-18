@@ -81,6 +81,9 @@ class GitSyncEngine(
                     // Ensure usernames match or save what's in github
                     securePreferences.saveGitHubUsername(username.ifEmpty { user.login })
                     securePreferences.saveGitHubToken(token)
+                    securePreferences.saveGitHubName(user.name ?: "")
+                    securePreferences.saveGitHubEmail(user.email ?: "")
+                    securePreferences.saveGitHubAvatarUrl(user.avatarUrl ?: "")
                     true
                 } else {
                     Log.e(TAG, "Authentication failed with code: ${response.code()}")

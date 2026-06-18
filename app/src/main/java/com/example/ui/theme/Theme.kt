@@ -47,14 +47,73 @@ private val LightColorScheme = lightColorScheme(
     onError = Color.White
 )
 
+private val CyberpunkColorScheme = darkColorScheme(
+    primary = Color(0xFF00F0FF), // Neon Cyan
+    onPrimary = Color.Black,
+    primaryContainer = Color(0xFF1F002B),
+    onPrimaryContainer = Color(0xFF00F0FF),
+    secondary = Color(0xFFFF007F), // Neon Pink
+    onSecondary = Color.White,
+    background = Color(0xFF0A0A0C), // Pure Blackish
+    onBackground = Color.White,
+    surface = Color(0xFF121216),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF1E1E24),
+    onSurfaceVariant = Color(0xFF8A8A93),
+    outline = Color(0xFF3A3A4A),
+    error = Color(0xFFFF0055),
+    onError = Color.White
+)
+
+private val EmeraldColorScheme = darkColorScheme(
+    primary = Color(0xFF81C784), // Emerald Green
+    onPrimary = Color(0xFF003300),
+    primaryContainer = Color(0xFF1B3D2F),
+    onPrimaryContainer = Color(0xFF81C784),
+    secondary = Color(0xFFAED581), // Light green-yellow
+    onSecondary = Color(0xFF1D3300),
+    background = Color(0xFF111713), // Deep forest charcoal
+    onBackground = Color(0xFFE8F5E9),
+    surface = Color(0xFF1B241E),
+    onSurface = Color(0xFFE8F5E9),
+    surfaceVariant = Color(0xFF2E3D33),
+    onSurfaceVariant = Color(0xFFA5B8AC),
+    outline = Color(0xFF435C4C),
+    error = Color(0xFFE57373),
+    onError = Color(0xFF5D0000)
+)
+
+private val ClassicColorScheme = darkColorScheme(
+    primary = Color(0xFFFFB74D), // Warm Amber
+    onPrimary = Color(0xFF5D3200),
+    primaryContainer = Color(0xFF3D2100),
+    onPrimaryContainer = Color(0xFFFFB74D),
+    secondary = Color(0xFFFFD54F), // Gold
+    onSecondary = Color(0xFF4A3B00),
+    background = Color(0xFF1A1612), // Deep chocolate-grey
+    onBackground = Color(0xFFFFF3E0),
+    surface = Color(0xFF26201B),
+    onSurface = Color(0xFFFFF3E0),
+    surfaceVariant = Color(0xFF382F27),
+    onSurfaceVariant = Color(0xFFD7CCC8),
+    outline = Color(0xFF5D4E43),
+    error = Color(0xFFE57373),
+    onError = Color(0xFF5D0000)
+)
+
 @Composable
 fun MyApplicationTheme(
+    themeName: String = "ARTISTIC",
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    // Force darkTheme to true if we always want the stunning dark Artistic Flair aesthetic,
-    // or let it follow. Let's use dark colors for darkTheme and beautiful light purple for light.
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val colorScheme = when (themeName) {
+        "CYBERPUNK" -> CyberpunkColorScheme
+        "EMERALD" -> EmeraldColorScheme
+        "CLASSIC" -> ClassicColorScheme
+        "LIGHT" -> LightColorScheme
+        else -> if (darkTheme) DarkColorScheme else LightColorScheme
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,

@@ -101,6 +101,38 @@ class SecurePreferences(private val context: Context) {
         return sharedPrefs.getString("github_username", "") ?: ""
     }
 
+    fun saveGitHubName(name: String) {
+        sharedPrefs.edit().putString("github_name", name).apply()
+    }
+
+    fun getGitHubName(): String {
+        return sharedPrefs.getString("github_name", "") ?: ""
+    }
+
+    fun saveGitHubEmail(email: String) {
+        sharedPrefs.edit().putString("github_email", email).apply()
+    }
+
+    fun getGitHubEmail(): String {
+        return sharedPrefs.getString("github_email", "") ?: ""
+    }
+
+    fun saveGitHubAvatarUrl(url: String) {
+        sharedPrefs.edit().putString("github_avatar_url", url).apply()
+    }
+
+    fun getGitHubAvatarUrl(): String {
+        return sharedPrefs.getString("github_avatar_url", "") ?: ""
+    }
+
+    fun saveSelectedTheme(theme: String) {
+        sharedPrefs.edit().putString("selected_theme", theme).apply()
+    }
+
+    fun getSelectedTheme(): String {
+        return sharedPrefs.getString("selected_theme", "ARTISTIC") ?: "ARTISTIC"
+    }
+
     fun clear() {
         sharedPrefs.edit().clear().apply()
     }

@@ -62,5 +62,6 @@ data class GitHubCommitInfo(
 data class UserResponse(
     val login: String,
     val name: String?,
-    @Json(name = "avatar_url") val avatarUrl: String?
+    @Json(name = "avatar_url") val avatarUrl: String?,
+    val email: String?
 )

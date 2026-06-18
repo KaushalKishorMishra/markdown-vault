@@ -15,6 +15,9 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.VaultViewModel
 import com.example.ui.viewmodel.VaultViewModelFactory
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,7 +32,8 @@ class MainActivity : ComponentActivity() {
         )[VaultViewModel::class.java]
 
         setContent {
-            MyApplicationTheme {
+            val selectedTheme by viewModel.selectedTheme.collectAsState()
+            MyApplicationTheme(themeName = selectedTheme) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     DashboardScreen(
                         viewModel = viewModel,

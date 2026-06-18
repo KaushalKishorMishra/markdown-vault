@@ -26,6 +26,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     // Git Configuration Info
     val gitUsername = MutableStateFlow(securePrefs.getGitHubUsername())
     val gitToken = MutableStateFlow(securePrefs.getGitHubToken())
+    val gitName = MutableStateFlow(securePrefs.getGitHubName())
+    val gitEmail = MutableStateFlow(securePrefs.getGitHubEmail())
+    val gitAvatarUrl = MutableStateFlow(securePrefs.getGitHubAvatarUrl())
     val isGitConfigured = MutableStateFlow(securePrefs.getGitHubToken().isNotEmpty())
 
     // Vaults State
@@ -260,8 +263,11 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val success = syncEngine.testConnection(username, token)
             if (success) {
-                gitUsername.value = username
+                gitUsername.value = securePrefs.getGitHubUsername()
                 gitToken.value = token
+                gitName.value = securePrefs.getGitHubName()
+                gitEmail.value = securePrefs.getGitHubEmail()
+                gitAvatarUrl.value = securePrefs.getGitHubAvatarUrl()
                 isGitConfigured.value = true
             }
         }
@@ -271,7 +277,17 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         securePrefs.clear()
         gitUsername.value = ""
         gitToken.value = ""
+        gitName.value = ""
+        gitEmail.value = ""
+        gitAvatarUrl.value = ""
         isGitConfigured.value = false
+    }
+
+    val selectedTheme = MutableStateFlow(securePrefs.getSelectedTheme())
+
+    fun selectTheme(theme: String) {
+        securePrefs.saveSelectedTheme(theme)
+        selectedTheme.value = theme
     }
 
     fun triggerSync() {
