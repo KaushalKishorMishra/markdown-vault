@@ -88,62 +88,57 @@ fun SplashScreen(
                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     )
                 )
-            ),
-        contentAlignment = Alignment.Center
+            )
+            .padding(bottom = 56.dp) // Bottom offset spacing
     ) {
+        // 1. Center Section: Animated App Logo
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(120.dp)
+                .scale(scale.value)
+                .alpha(alpha.value)
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.secondary
+                        )
+                    ),
+                    shape = RoundedCornerShape(28.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = "App Logo",
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(60.dp)
+            )
+        }
+
+        // 2. Bottom Section: Brand Name & Tagline
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(24.dp)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .alpha(textAlpha.value)
+                .offset(y = textOffsetY.value.dp)
+                .padding(horizontal = 24.dp)
         ) {
-            // Logo Icon container
-            Box(
-                modifier = Modifier
-                    .size(120.dp)
-                    .scale(scale.value)
-                    .alpha(alpha.value)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.secondary
-                            )
-                        ),
-                        shape = RoundedCornerShape(28.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "App Logo",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(60.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // App title
             Text(
                 text = "Markdown Vault",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .alpha(textAlpha.value)
-                    .offset(y = textOffsetY.value.dp)
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Tagline
             Text(
                 text = "Your Notes. Secure. Anywhere.",
                 fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier
-                    .alpha(textAlpha.value)
-                    .offset(y = textOffsetY.value.dp)
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
     }
