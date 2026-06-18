@@ -17,6 +17,10 @@ import com.example.ui.viewmodel.VaultViewModelFactory
 
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.example.ui.screens.SplashScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,11 +38,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             val selectedTheme by viewModel.selectedTheme.collectAsState()
             MyApplicationTheme(themeName = selectedTheme) {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    DashboardScreen(
-                        viewModel = viewModel,
-                        modifier = Modifier.padding(innerPadding)
+                var showSplashScreen by remember { mutableStateOf(true) }
+
+                if (showSplashScreen) {
+                    SplashScreen(
+                        onFinished = { showSplashScreen = false }
                     )
+                } else {
+                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                        DashboardScreen(
+                            viewModel = viewModel,
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    }
                 }
             }
         }

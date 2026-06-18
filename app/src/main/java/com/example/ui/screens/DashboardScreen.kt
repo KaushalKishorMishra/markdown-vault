@@ -53,6 +53,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 
+enum class DashboardScreenType {
+    SETTINGS,
+    EXPLORER,
+    EMPTY,
+    WORKSPACE
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -91,7 +98,7 @@ fun DashboardScreen(
     // Main scaffold
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = !isTablet,
+        gesturesEnabled = false,
         drawerContent = {
             if (!isTablet) {
                 ModalDrawerSheet(
@@ -368,91 +375,115 @@ fun DashboardScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    if (showSettingsScreen) {
-                        val gitName by viewModel.gitName.collectAsStateWithLifecycle()
-                        val gitEmail by viewModel.gitEmail.collectAsStateWithLifecycle()
-                        val gitAvatarUrl by viewModel.gitAvatarUrl.collectAsStateWithLifecycle()
-                        val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
-
-                        SettingsScreen(
-                            currentUsername = gitUser,
-                            currentToken = gitToken,
-                            currentName = gitName,
-                            currentEmail = gitEmail,
-                            currentAvatarUrl = gitAvatarUrl,
-                            isBackgroundSyncEnabled = isBackgroundSyncEnabled,
-                            onToggleBackgroundSync = { enabled ->
-                                viewModel.toggleBackgroundSync(enabled)
-                            },
-                            selectedTheme = selectedTheme,
-                            onSelectTheme = { theme ->
-                                viewModel.selectTheme(theme)
-                            },
-                            onConfirm = { user, token ->
-                                viewModel.updateGitCredentials(user, token)
-                                showSettingsScreen = false
-                            },
-                            onClear = {
-                                viewModel.clearGitCredentials()
-                                showSettingsScreen = false
-                            },
-                            onCheckStatus = { user, token ->
-                                viewModel.syncEngine.testConnection(user, token)
-                            },
-                            onBackClick = { showSettingsScreen = false },
-                            vaults = vaults,
-                            activeVault = activeVault,
-                            onVaultSelect = { vault ->
-                                viewModel.selectVault(vault)
-                                showSettingsScreen = false
-                            },
-                            onVaultDelete = { vault ->
-                                viewModel.deleteVault(vault)
-                            },
-                            onAddVaultClick = { showAddVaultDialog = true },
-                            viewModel = viewModel
-                        )
-                    } else if (selectedNote == null) {
-                        if (activeVault != null) {
-                            FolderExplorer(
-                                activeVault = activeVault!!,
-                                notes = notes,
-                                currentPath = currentBrowsingPath,
-                                onPathChange = { currentBrowsingPath = it },
-                                onNoteSelect = { viewModel.selectNote(it) },
-                                onAddNoteClick = { showAddNoteDialog = true },
-                                onDeleteFolder = { viewModel.deleteFolder(it) },
-                                onRenameFolder = { old, new -> viewModel.renameFolder(old, new) },
-                                onRenameNote = { note, title, name -> viewModel.renameNote(note, title, name) },
-                                onDeleteNote = { viewModel.deleteNote(it) },
-                                searchQuery = searchQuery,
-                                onSearchChange = { viewModel.setSearchQuery(it) },
-                                syncState = syncState,
-                                isGitConfigured = isGitConfigured,
-                                onSyncClick = { showSyncConfirmationDialog = true },
-                                onGitConfigClick = { showSettingsScreen = true }
-                            )
-                        } else {
-                            EmptyWorkspaceArea(
-                                activeVault = null,
-                                notesCount = 0,
-                                onAddNoteClick = { showAddNoteDialog = true },
-                                onGitConfigClick = { showSettingsScreen = true },
-                                isGitConfigured = isGitConfigured
-                            )
+                    val currentScreenType = when {
+                        showSettingsScreen -> DashboardScreenType.SETTINGS
+                        selectedNote == null -> {
+                            if (activeVault != null) DashboardScreenType.EXPLORER else DashboardScreenType.EMPTY
                         }
-                    } else {
-                        NoteWorkspace(
-                            note = selectedNote!!,
-                            isEditMode = isEditMode,
-                            isTabletLayout = isTablet,
-                            syncState = syncState,
-                            onContentChange = { viewModel.updateSelectedNoteContent(it) },
-                            onEditModeChange = { viewModel.setEditMode(it) },
-                            onResolveConflict = { resolution, mergedText ->
-                                viewModel.resolveMergeConflict(resolution, mergedText)
+                        else -> DashboardScreenType.WORKSPACE
+                    }
+
+                    AnimatedContent(
+                        targetState = currentScreenType,
+                        transitionSpec = {
+                            if (initialState == DashboardScreenType.EMPTY && targetState == DashboardScreenType.EXPLORER) {
+                                fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
+                            } else if (targetState == DashboardScreenType.WORKSPACE || targetState == DashboardScreenType.SETTINGS) {
+                                (slideInHorizontally(animationSpec = tween(400)) { width -> width } + fadeIn(animationSpec = tween(400))) togetherWith
+                                        (slideOutHorizontally(animationSpec = tween(400)) { width -> -width } + fadeOut(animationSpec = tween(400)))
+                            } else {
+                                (slideInHorizontally(animationSpec = tween(400)) { width -> -width } + fadeIn(animationSpec = tween(400))) togetherWith
+                                        (slideOutHorizontally(animationSpec = tween(400)) { width -> width } + fadeOut(animationSpec = tween(400)))
                             }
-                        )
+                        },
+                        label = "screen_transition",
+                        modifier = Modifier.fillMaxSize()
+                    ) { screen ->
+                        when (screen) {
+                            DashboardScreenType.SETTINGS -> {
+                                val gitName by viewModel.gitName.collectAsStateWithLifecycle()
+                                val gitEmail by viewModel.gitEmail.collectAsStateWithLifecycle()
+                                val gitAvatarUrl by viewModel.gitAvatarUrl.collectAsStateWithLifecycle()
+                                val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
+
+                                SettingsScreen(
+                                    currentUsername = gitUser,
+                                    currentToken = gitToken,
+                                    currentName = gitName,
+                                    currentEmail = gitEmail,
+                                    currentAvatarUrl = gitAvatarUrl,
+                                    isBackgroundSyncEnabled = isBackgroundSyncEnabled,
+                                    onToggleBackgroundSync = { enabled ->
+                                        viewModel.toggleBackgroundSync(enabled)
+                                    },
+                                    selectedTheme = selectedTheme,
+                                    onSelectTheme = { theme ->
+                                        viewModel.selectTheme(theme)
+                                    },
+                                    onConfirm = { user, token ->
+                                        viewModel.updateGitCredentials(user, token)
+                                        showSettingsScreen = false
+                                    },
+                                    onClear = {
+                                        viewModel.clearGitCredentials()
+                                        showSettingsScreen = false
+                                    },
+                                    onCheckStatus = { user, token ->
+                                        viewModel.syncEngine.testConnection(user, token)
+                                    },
+                                    onBackClick = { showSettingsScreen = false },
+                                    vaults = vaults,
+                                    activeVault = activeVault,
+                                    onVaultSelect = { vault ->
+                                        viewModel.selectVault(vault)
+                                        showSettingsScreen = false
+                                    },
+                                    onVaultDelete = { vault ->
+                                        viewModel.deleteVault(vault)
+                                    },
+                                    onAddVaultClick = { showAddVaultDialog = true },
+                                    viewModel = viewModel
+                                )
+                            }
+                            DashboardScreenType.EXPLORER -> {
+                                FolderExplorer(
+                                    activeVault = activeVault!!,
+                                    notes = notes,
+                                    currentPath = currentBrowsingPath,
+                                    onPathChange = { currentBrowsingPath = it },
+                                    onNoteSelect = { viewModel.selectNote(it) },
+                                    onAddNoteClick = { showAddNoteDialog = true },
+                                    onDeleteFolder = { viewModel.deleteFolder(it) },
+                                    onRenameFolder = { old, new -> viewModel.renameFolder(old, new) },
+                                    onRenameNote = { note, title, name -> viewModel.renameNote(note, title, name) },
+                                    onDeleteNote = { viewModel.deleteNote(it) },
+                                    searchQuery = searchQuery,
+                                    onSearchChange = { viewModel.setSearchQuery(it) }
+                                )
+                            }
+                            DashboardScreenType.EMPTY -> {
+                                EmptyWorkspaceArea(
+                                    activeVault = null,
+                                    notesCount = 0,
+                                    onAddNoteClick = { showAddNoteDialog = true },
+                                    onGitConfigClick = { showSettingsScreen = true },
+                                    isGitConfigured = isGitConfigured
+                                )
+                            }
+                            DashboardScreenType.WORKSPACE -> {
+                                NoteWorkspace(
+                                    note = selectedNote!!,
+                                    isEditMode = isEditMode,
+                                    isTabletLayout = isTablet,
+                                    syncState = syncState,
+                                    onContentChange = { viewModel.updateSelectedNoteContent(it) },
+                                    onEditModeChange = { viewModel.setEditMode(it) },
+                                    onResolveConflict = { resolution, mergedText ->
+                                        viewModel.resolveMergeConflict(resolution, mergedText)
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -610,7 +641,7 @@ fun SidebarContent(
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = "GitVault",
+                text = "Markdown Vault",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -2393,11 +2424,7 @@ fun FolderExplorer(
     onRenameNote: (Note, String, String) -> Unit,
     onDeleteNote: (Note) -> Unit,
     searchQuery: String,
-    onSearchChange: (String) -> Unit,
-    syncState: SyncState,
-    isGitConfigured: Boolean,
-    onSyncClick: () -> Unit,
-    onGitConfigClick: () -> Unit
+    onSearchChange: (String) -> Unit
 ) {
     val currentPrefix = if (currentPath.isEmpty()) "" else "$currentPath/"
 
@@ -2463,157 +2490,6 @@ fun FolderExplorer(
                 .fillMaxWidth()
                 .padding(bottom = 12.dp)
         )
-
-        // Premium Git Sync & Workspace Status Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .border(
-                    width = 1.dp,
-                    color = when (syncState) {
-                        is SyncState.Syncing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                        is SyncState.Success -> Emerald500.copy(alpha = 0.5f)
-                        is SyncState.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
-                        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                    },
-                    shape = RoundedCornerShape(16.dp)
-                ),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            when (syncState) {
-                                is SyncState.Syncing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                is SyncState.Success -> Emerald500.copy(alpha = 0.15f)
-                                is SyncState.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
-                                else -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Sync,
-                        contentDescription = null,
-                        tint = when (syncState) {
-                            is SyncState.Syncing -> MaterialTheme.colorScheme.primary
-                            is SyncState.Success -> Emerald500
-                            is SyncState.Error -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.secondary
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.width(12.dp))
-                
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (isGitConfigured) "GitHub Cloud Synchronizer" else "GitHub Sync Pending Setup",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    
-                    val detailText = if (isGitConfigured) {
-                        val repoName = activeVault.gitRepo
-                        val branch = activeVault.branch
-                        "Repo: $repoName • Branch: $branch"
-                    } else {
-                        "Sync notes to/from GitHub repository automatically"
-                    }
-                    
-                    Text(
-                        text = detailText,
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    
-                    if (isGitConfigured) {
-                        val lastSyncedVal = activeVault.lastSynced
-                        val lastSyncedText = if (lastSyncedVal == 0L) {
-                            "Never synced yet"
-                        } else {
-                            val diff = System.currentTimeMillis() - lastSyncedVal
-                            if (diff < 60_000L) {
-                                "Just synced"
-                            } else {
-                                val minutes = diff / 60_000L
-                                if (minutes < 60) {
-                                    "$minutes m ago"
-                                } else {
-                                    val hours = minutes / 60
-                                    if (hours < 24) {
-                                        "$hours h ago"
-                                    } else {
-                                        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(lastSyncedVal))
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Text(
-                            text = "Last sync: $lastSyncedText",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                        )
-                    }
-                }
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                if (isGitConfigured) {
-                    if (syncState is SyncState.Syncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else {
-                        Button(
-                            onClick = { onSyncClick() },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Text("Sync", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                } else {
-                    Button(
-                        onClick = { onGitConfigClick() },
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        ),
-                        modifier = Modifier.height(30.dp)
-                    ) {
-                        Text("Setup", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
 
         // 2. Navigation Header / Breadcrumbs (Only show if not searching)
         if (searchQuery.isEmpty()) {
