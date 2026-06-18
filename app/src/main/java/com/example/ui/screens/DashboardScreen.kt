@@ -42,8 +42,13 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.VaultViewModel
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import coil.compose.AsyncImage
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +62,7 @@ fun DashboardScreen(
 
     val vaults by viewModel.allVaults.collectAsStateWithLifecycle()
     val activeVault by viewModel.activeVault.collectAsStateWithLifecycle()
+    var currentBrowsingPath by remember(activeVault) { mutableStateOf("") }
     val notes by viewModel.notesForActiveVault.collectAsStateWithLifecycle()
     val selectedNote by viewModel.selectedNote.collectAsStateWithLifecycle()
     val isEditMode by viewModel.isEditMode.collectAsStateWithLifecycle()
@@ -74,6 +80,7 @@ fun DashboardScreen(
     var showGitConfigDialog by remember { mutableStateOf(false) }
     var showVaultSettingsMenu by remember { mutableStateOf(false) }
     var showVaultManagerDialog by remember { mutableStateOf(false) }
+    var showAddFolderDialog by remember { mutableStateOf(false) }
 
     // Drawer state (for mobile)
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -158,24 +165,45 @@ fun DashboardScreen(
                     CenterAlignedTopAppBar(
                         title = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = activeVault?.name ?: "No Vault Selected",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (activeVault != null) {
+                                if (selectedNote != null) {
                                     Text(
-                                        text = activeVault!!.gitRepo,
+                                        text = selectedNote!!.title,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = selectedNote!!.filePath,
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                } else {
+                                    Text(
+                                        text = activeVault?.name ?: "No Vault Selected",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (activeVault != null) {
+                                        Text(
+                                            text = activeVault!!.gitRepo,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
                         },
                         navigationIcon = {
-                            if (!isTablet) {
+                            if (selectedNote != null) {
+                                IconButton(onClick = { viewModel.selectNote(null) }) {
+                                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back to Folder Explorer")
+                                }
+                            } else if (!isTablet) {
                                 IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
                                     Icon(imageVector = Icons.Default.Menu, contentDescription = "Open Sidebar")
                                 }
@@ -231,6 +259,86 @@ fun DashboardScreen(
                         )
                     )
                 },
+                floatingActionButton = {
+                    if (selectedNote == null && activeVault != null) {
+                        var showFabMenu by remember { mutableStateOf(false) }
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (showFabMenu) {
+                                // Create Folder FAB
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        tonalElevation = 4.dp
+                                    ) {
+                                        Text(
+                                            text = "Create Folder",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    FloatingActionButton(
+                                        onClick = {
+                                            showFabMenu = false
+                                            showAddFolderDialog = true
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        modifier = Modifier.size(44.dp)
+                                    ) {
+                                        Icon(Icons.Default.CreateNewFolder, contentDescription = "Create Folder", modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                                
+                                // Create Note FAB
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        tonalElevation = 4.dp
+                                    ) {
+                                        Text(
+                                            text = "Create Note",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    FloatingActionButton(
+                                        onClick = {
+                                            showFabMenu = false
+                                            showAddNoteDialog = true
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        modifier = Modifier.size(44.dp)
+                                    ) {
+                                        Icon(Icons.Default.NoteAdd, contentDescription = "Create Note", modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
+                            
+                            FloatingActionButton(
+                                onClick = { showFabMenu = !showFabMenu },
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ) {
+                                Icon(
+                                    imageVector = if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
+                                    contentDescription = "Options"
+                                )
+                            }
+                        }
+                    }
+                },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -241,13 +349,30 @@ fun DashboardScreen(
                         .padding(innerPadding)
                 ) {
                     if (selectedNote == null) {
-                        EmptyWorkspaceArea(
-                            activeVault = activeVault,
-                            notesCount = notes.size,
-                            onAddNoteClick = { showAddNoteDialog = true },
-                            onGitConfigClick = { showGitConfigDialog = true },
-                            isGitConfigured = isGitConfigured
-                        )
+                        if (activeVault != null) {
+                            FolderExplorer(
+                                activeVault = activeVault!!,
+                                notes = notes,
+                                currentPath = currentBrowsingPath,
+                                onPathChange = { currentBrowsingPath = it },
+                                onNoteSelect = { viewModel.selectNote(it) },
+                                onAddNoteClick = { showAddNoteDialog = true },
+                                onDeleteFolder = { viewModel.deleteFolder(it) },
+                                onRenameFolder = { old, new -> viewModel.renameFolder(old, new) },
+                                onRenameNote = { note, title, name -> viewModel.renameNote(note, title, name) },
+                                onDeleteNote = { viewModel.deleteNote(it) },
+                                searchQuery = searchQuery,
+                                onSearchChange = { viewModel.setSearchQuery(it) }
+                            )
+                        } else {
+                            EmptyWorkspaceArea(
+                                activeVault = null,
+                                notesCount = 0,
+                                onAddNoteClick = { showAddNoteDialog = true },
+                                onGitConfigClick = { showGitConfigDialog = true },
+                                isGitConfigured = isGitConfigured
+                            )
+                        }
                     } else {
                         NoteWorkspace(
                             note = selectedNote!!,
@@ -259,7 +384,8 @@ fun DashboardScreen(
                             onDeleteClick = { viewModel.deleteSelectedNote() },
                             onResolveConflict = { resolution, mergedText ->
                                 viewModel.resolveMergeConflict(resolution, mergedText)
-                            }
+                            },
+                            onBackClick = { viewModel.selectNote(null) }
                         )
                     }
                 }
@@ -285,9 +411,13 @@ fun DashboardScreen(
                 if (note.filePath.contains("/")) note.filePath.substringBeforeLast("/") else ""
             }.filter { it.isNotEmpty() }.distinct().sorted()
         }
-        val defaultPrefix = when (activeVault?.vaultType) {
-            "LOGSEQ" -> "pages/"
-            else -> ""
+        val defaultPrefix = if (currentBrowsingPath.isNotEmpty()) {
+            if (currentBrowsingPath.endsWith("/")) currentBrowsingPath else "$currentBrowsingPath/"
+        } else {
+            when (activeVault?.vaultType) {
+                "LOGSEQ" -> "pages/"
+                else -> ""
+            }
         }
         AddNoteDialog(
             existingFolders = existingFolders,
@@ -296,6 +426,19 @@ fun DashboardScreen(
             onConfirm = { title, path ->
                 viewModel.createNote(title, path)
                 showAddNoteDialog = false
+            }
+        )
+    }
+
+    if (showAddFolderDialog) {
+        AddFolderDialog(
+            onDismiss = { showAddFolderDialog = false },
+            onConfirm = { folderName ->
+                val cleanFolder = folderName.trim().removePrefix("/").removeSuffix("/")
+                val finalFolder = if (currentBrowsingPath.isNotEmpty()) "$currentBrowsingPath/$cleanFolder" else cleanFolder
+                val targetPath = "$finalFolder/welcome.md"
+                viewModel.createNote("About $cleanFolder", targetPath)
+                showAddFolderDialog = false
             }
         )
     }
@@ -1032,7 +1175,8 @@ fun NoteWorkspace(
     onContentChange: (String) -> Unit,
     onEditToggle: (Boolean) -> Unit,
     onDeleteClick: () -> Unit,
-    onResolveConflict: (String, String) -> Unit
+    onResolveConflict: (String, String) -> Unit,
+    onBackClick: () -> Unit
 ) {
     if (note.syncStatus == "CONFLICT") {
         // Show Conflict Resolution Overlay
@@ -1055,6 +1199,18 @@ fun NoteWorkspace(
             ) {
                 // File info + status
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Close Note",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
                     val statusText = when (note.syncStatus) {
                         "SYNCED" -> "Synced"
                         "MODIFIED" -> "Modified locally"
@@ -2517,4 +2673,646 @@ fun VaultManagerDialog(
         }
     )
 }
+
+@Composable
+fun FolderExplorer(
+    activeVault: Vault,
+    notes: List<Note>,
+    currentPath: String,
+    onPathChange: (String) -> Unit,
+    onNoteSelect: (Note) -> Unit,
+    onAddNoteClick: () -> Unit,
+    onDeleteFolder: (String) -> Unit,
+    onRenameFolder: (String, String) -> Unit,
+    onRenameNote: (Note, String, String) -> Unit,
+    onDeleteNote: (Note) -> Unit,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit
+) {
+    val currentPrefix = if (currentPath.isEmpty()) "" else "$currentPath/"
+
+    // Parse folders and files in currentPath, flattening during search to show matched files directly
+    val itemsInCurrentDir = remember(notes, currentPath, searchQuery) {
+        val folders = mutableSetOf<String>()
+        val files = mutableListOf<Note>()
+        
+        notes.forEach { note ->
+            if (searchQuery.isNotEmpty()) {
+                files.add(note)
+            } else {
+                if (currentPath.isEmpty()) {
+                    if (note.filePath.contains("/")) {
+                        folders.add(note.filePath.substringBefore("/"))
+                    } else {
+                        files.add(note)
+                    }
+                } else {
+                    if (note.filePath.startsWith(currentPrefix)) {
+                        val relative = note.filePath.removePrefix(currentPrefix)
+                        if (relative.contains("/")) {
+                            folders.add(relative.substringBefore("/"))
+                        } else {
+                            files.add(note)
+                        }
+                    }
+                }
+            }
+        }
+        Pair(folders.toList().sorted(), files.sortedBy { it.title })
+    }
+    val folders = itemsInCurrentDir.first
+    val files = itemsInCurrentDir.second
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // 1. Google Files Style Search Bar (Pill shape)
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchChange,
+            placeholder = { Text("Search files and folders...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                    }
+                }
+            },
+            shape = RoundedCornerShape(24.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        )
+
+        // 2. Navigation Header / Breadcrumbs (Only show if not searching)
+        if (searchQuery.isEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                if (currentPath.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            val parent = if (currentPath.contains("/")) currentPath.substringBeforeLast("/") else ""
+                            onPathChange(parent)
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Navigate Up",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
+                // Breadcrumb Text Nodes
+                val scrollState = rememberScrollState()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(scrollState)
+                ) {
+                    Text(
+                        text = "Cabinet Root",
+                        fontSize = 14.sp,
+                        fontWeight = if (currentPath.isEmpty()) FontWeight.Bold else FontWeight.Medium,
+                        color = if (currentPath.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clickable { onPathChange("") }
+                            .padding(vertical = 4.dp, horizontal = 6.dp)
+                    )
+
+                    if (currentPath.isNotEmpty()) {
+                        val segments = currentPath.split("/")
+                        segments.forEachIndexed { index, segment ->
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            val isLast = index == segments.lastIndex
+                            val targetPath = segments.take(index + 1).joinToString("/")
+                            Text(
+                                text = segment,
+                                fontSize = 14.sp,
+                                fontWeight = if (isLast) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isLast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clickable { onPathChange(targetPath) }
+                                    .padding(vertical = 4.dp, horizontal = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Header during active search
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Text(
+                    text = "Matching results (${files.size})",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = { onSearchChange("") }) {
+                    Text("Clear Search", fontSize = 12.sp)
+                }
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), modifier = Modifier.padding(bottom = 16.dp))
+
+        if (folders.isEmpty() && files.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = if (searchQuery.isNotEmpty()) "No files match your query" else "This folder is empty",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 140.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                // Render folders grid (Only if searchQuery is empty)
+                if (searchQuery.isEmpty() && folders.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            text = "Folders".uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(bottom = 6.dp, top = 4.dp),
+                            letterSpacing = 1.sp
+                        )
+                    }
+
+                    items(folders) { folder ->
+                        var showFolderMenu by remember { mutableStateOf(false) }
+                        var showRenameFolderDialog by remember { mutableStateOf(false) }
+                        var showDeleteFolderDialog by remember { mutableStateOf(false) }
+                        val fullFolderPath = if (currentPath.isEmpty()) folder else "$currentPath/$folder"
+
+                        Surface(
+                            onClick = { onPathChange(fullFolderPath) },
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = "Folder",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = folder,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Box {
+                                    IconButton(
+                                        onClick = { showFolderMenu = true },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreVert,
+                                            contentDescription = "Folder Options",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = showFolderMenu,
+                                        onDismissRequest = { showFolderMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Rename Folder") },
+                                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                            onClick = {
+                                                showFolderMenu = false
+                                                showRenameFolderDialog = true
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Delete Folder", color = MaterialTheme.colorScheme.error) },
+                                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                                            onClick = {
+                                                showFolderMenu = false
+                                                showDeleteFolderDialog = true
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (showRenameFolderDialog) {
+                            RenameFolderDialog(
+                                currentName = folder,
+                                onDismiss = { showRenameFolderDialog = false },
+                                onConfirm = { newName ->
+                                    val parent = if (currentPath.isEmpty()) "" else "$currentPath/"
+                                    onRenameFolder(fullFolderPath, "$parent$newName")
+                                    showRenameFolderDialog = false
+                                }
+                            )
+                        }
+
+                        if (showDeleteFolderDialog) {
+                            DeleteFolderDialog(
+                                folderName = folder,
+                                onDismiss = { showDeleteFolderDialog = false },
+                                onConfirm = {
+                                    onDeleteFolder(fullFolderPath)
+                                    showDeleteFolderDialog = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Render files grid
+                if (files.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) "Search Results".uppercase() else "Files".uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            modifier = Modifier.padding(bottom = 6.dp, top = 16.dp),
+                            letterSpacing = 1.sp
+                        )
+                    }
+
+                    items(files) { file ->
+                        var showFileMenu by remember { mutableStateOf(false) }
+                        var showRenameFileDialog by remember { mutableStateOf(false) }
+                        var showDeleteFileDialog by remember { mutableStateOf(false) }
+                        val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                        val context = androidx.compose.ui.platform.LocalContext.current
+
+                        val syncColor = when (file.syncStatus) {
+                            "SYNCED" -> Emerald500
+                            "MODIFIED" -> Sky400
+                            "CONFLICT" -> Amber500
+                            "LOCAL_ONLY" -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+
+                        Surface(
+                            onClick = { onNoteSelect(file) },
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Description,
+                                        contentDescription = "File",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(syncColor)
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    
+                                    Box {
+                                        IconButton(
+                                            onClick = { showFileMenu = true },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = "File Options",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = showFileMenu,
+                                            onDismissRequest = { showFileMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Open File") },
+                                                leadingIcon = { Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                                onClick = {
+                                                    showFileMenu = false
+                                                    onNoteSelect(file)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Rename File") },
+                                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                                onClick = {
+                                                    showFileMenu = false
+                                                    showRenameFileDialog = true
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Copy Path") },
+                                                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                                onClick = {
+                                                    showFileMenu = false
+                                                    val pathString = file.filePath
+                                                    val annotated = androidx.compose.ui.text.buildAnnotatedString { append(pathString) }
+                                                    clipboardManager.setText(annotated)
+                                                    android.widget.Toast.makeText(context, "Copied: $pathString", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Delete File", color = MaterialTheme.colorScheme.error) },
+                                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                                                onClick = {
+                                                    showFileMenu = false
+                                                    showDeleteFileDialog = true
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = file.title,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = file.filePath.substringAfterLast("/"),
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        if (showRenameFileDialog) {
+                            RenameNoteDialog(
+                                note = file,
+                                onDismiss = { showRenameFileDialog = false },
+                                onConfirm = { newTitle, newFileName ->
+                                    onRenameNote(file, newTitle, newFileName)
+                                    showRenameFileDialog = false
+                                }
+                            )
+                        }
+
+                        if (showDeleteFileDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showDeleteFileDialog = false },
+                                title = { Text("Delete Note?") },
+                                text = { Text("Are you sure you want to delete note \"${file.title}\"?") },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            onDeleteNote(file)
+                                            showDeleteFileDialog = false
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Delete")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDeleteFileDialog = false }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Nested Folders Helpers Dialogs ---
+
+@Composable
+fun AddFolderDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var folderName by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create New Folder") },
+        text = {
+            OutlinedTextField(
+                value = folderName,
+                onValueChange = { folderName = it },
+                label = { Text("Folder Name") },
+                placeholder = { Text("e.g. journals or projects/web") },
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (folderName.trim().isNotEmpty()) {
+                        onConfirm(folderName.trim())
+                    }
+                },
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun RenameFolderDialog(
+    currentName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var newName by remember { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename Folder") },
+        text = {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("Folder Name") },
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (newName.trim().isNotEmpty() && newName.trim() != currentName) {
+                        onConfirm(newName.trim())
+                    }
+                },
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Rename")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun DeleteFolderDialog(
+    folderName: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Folder?") },
+        text = {
+            Text("Are you sure you want to delete folder \"$folderName\" and all its contents? This will delete all notes stored within this nested path.")
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Delete Everything")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun RenameNoteDialog(
+    note: Note,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    var title by remember { mutableStateOf(note.title) }
+    val initialFileName = note.filePath.substringAfterLast("/").removeSuffix(".md").removeSuffix(".txt")
+    var fileName by remember { mutableStateOf(initialFileName) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename File") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Note Title") },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = fileName,
+                    onValueChange = { fileName = it },
+                    label = { Text("File Name (without extension)") },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (title.trim().isNotEmpty() && fileName.trim().isNotEmpty()) {
+                        onConfirm(title.trim(), fileName.trim())
+                    }
+                },
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Rename")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
 

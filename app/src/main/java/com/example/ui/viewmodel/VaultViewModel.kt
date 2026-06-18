@@ -111,9 +111,113 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         _isEditMode.value = edit
     }
 
-    fun selectNote(note: Note) {
+    fun selectNote(note: Note?) {
         _selectedNote.value = note
         _isEditMode.value = false
+    }
+
+    // --- Folder and Note Management Extras (Google Files Style) ---
+
+    fun renameNote(note: Note, newTitle: String, newFileName: String) {
+        val vault = _activeVault.value ?: return
+        val cleanName = newFileName.trim().removeSuffix(".md").removeSuffix(".txt") + ".md"
+        val parentDir = if (note.filePath.contains("/")) note.filePath.substringBeforeLast("/") + "/" else ""
+        val newFilePath = "$parentDir$cleanName"
+        
+        if (newFilePath == note.filePath) {
+            // Only update title if filename has not changed
+            viewModelScope.launch {
+                val updatedStatus = if (note.syncStatus == "LOCAL_ONLY") "LOCAL_ONLY" else "MODIFIED"
+                noteDao.insertNote(note.copy(title = newTitle, syncStatus = updatedStatus, updatedAt = System.currentTimeMillis()))
+                if (_selectedNote.value?.id == note.id) {
+                    _selectedNote.value = noteDao.getNoteById(note.id)
+                }
+            }
+            return
+        }
+        
+        viewModelScope.launch {
+            val newNote = note.copy(
+                id = "${vault.id}:$newFilePath",
+                filePath = newFilePath,
+                title = newTitle,
+                syncStatus = if (note.syncStatus == "LOCAL_ONLY") "LOCAL_ONLY" else "MODIFIED",
+                updatedAt = System.currentTimeMillis()
+            )
+            noteDao.insertNote(newNote)
+            
+            if (note.syncStatus == "LOCAL_ONLY") {
+                noteDao.deleteNote(note)
+            } else {
+                noteDao.insertNote(note.copy(syncStatus = "DELETED"))
+            }
+            
+            if (_selectedNote.value?.id == note.id) {
+                _selectedNote.value = newNote
+            }
+        }
+    }
+
+    fun deleteFolder(folderPath: String) {
+        val vault = _activeVault.value ?: return
+        viewModelScope.launch {
+            val prefix = if (folderPath.endsWith("/")) folderPath else "$folderPath/"
+            val allNotes = noteDao.getNotesForVault(vault.id)
+            val notesInFolder = allNotes.filter { it.filePath.startsWith(prefix) }
+            
+            notesInFolder.forEach { note ->
+                if (note.syncStatus == "LOCAL_ONLY") {
+                    noteDao.deleteNote(note)
+                } else {
+                    noteDao.insertNote(note.copy(syncStatus = "DELETED"))
+                }
+            }
+            
+            val activeNote = _selectedNote.value
+            if (activeNote != null && activeNote.filePath.startsWith(prefix)) {
+                _selectedNote.value = null
+            }
+        }
+    }
+
+    fun renameFolder(oldFolderPath: String, newFolderPath: String) {
+        val vault = _activeVault.value ?: return
+        val oldClean = oldFolderPath.trim().removeSuffix("/")
+        val newClean = newFolderPath.trim().removeSuffix("/")
+        if (oldClean == newClean || newClean.isEmpty()) return
+        
+        viewModelScope.launch {
+            val oldPrefix = "$oldClean/"
+            val newPrefix = "$newClean/"
+            val allNotes = noteDao.getNotesForVault(vault.id)
+            val notesInFolder = allNotes.filter { it.filePath.startsWith(oldPrefix) }
+            
+            notesInFolder.forEach { note ->
+                val newFilePath = note.filePath.replaceFirst(oldPrefix, newPrefix)
+                val newNote = note.copy(
+                    id = "${vault.id}:$newFilePath",
+                    filePath = newFilePath,
+                    syncStatus = if (note.syncStatus == "LOCAL_ONLY") "LOCAL_ONLY" else "MODIFIED",
+                    updatedAt = System.currentTimeMillis()
+                )
+                noteDao.insertNote(newNote)
+                
+                if (note.syncStatus == "LOCAL_ONLY") {
+                    noteDao.deleteNote(note)
+                } else {
+                    noteDao.insertNote(note.copy(syncStatus = "DELETED"))
+                }
+            }
+            
+            val activeNote = _selectedNote.value
+            if (activeNote != null && activeNote.filePath.startsWith(oldPrefix)) {
+                val newActiveFilePath = activeNote.filePath.replaceFirst(oldPrefix, newPrefix)
+                val matching = noteDao.getNoteById("${vault.id}:$newActiveFilePath")
+                if (matching != null) {
+                    _selectedNote.value = matching
+                }
+            }
+        }
     }
 
     // --- Vault Management Commands ---
@@ -254,6 +358,19 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 noteDao.insertNote(note.copy(syncStatus = "DELETED"))
             }
             _selectedNote.value = null
+        }
+    }
+
+    fun deleteNote(note: Note) {
+        viewModelScope.launch {
+            if (note.syncStatus == "LOCAL_ONLY") {
+                noteDao.deleteNote(note)
+            } else {
+                noteDao.insertNote(note.copy(syncStatus = "DELETED"))
+            }
+            if (_selectedNote.value?.id == note.id) {
+                _selectedNote.value = null
+            }
         }
     }
 
