@@ -33,6 +33,8 @@ def main():
     
     new_version_name = current_version_name
     new_version_code = current_version_code
+    output_version_name = current_version_name
+    run_number = os.environ.get("GITHUB_RUN_NUMBER", "1")
     
     # Logic for bumping
     should_commit = False
@@ -41,6 +43,7 @@ def main():
         # Tag pushed (e.g. v1.2.3)
         tag_version = ref_name[1:] if ref_name.startswith("v") else ref_name
         new_version_name = tag_version
+        output_version_name = tag_version
         new_version_code = current_version_code + 1
         should_commit = True
         print(f"Triggered by tag. Bumping version name to {new_version_name} and version code to {new_version_code}")
@@ -49,9 +52,12 @@ def main():
         should_commit = True
         if input_version_name and input_version_name.strip():
             new_version_name = input_version_name.strip()
+            output_version_name = new_version_name
             print(f"Using manual version name: {new_version_name}")
         else:
-            print(f"No manual version name provided. Keeping current: {new_version_name}")
+            new_version_name = current_version_name
+            output_version_name = f"{current_version_name}-build{run_number}"
+            print(f"No manual version name. Generating unique build version: {output_version_name}")
             
         if input_version_code and input_version_code.strip():
             try:
@@ -66,12 +72,16 @@ def main():
             
     elif event_name == "push" and ref == "refs/heads/main":
         # Push to main branch (not a tag)
+        new_version_name = current_version_name  # Keep base clean in properties file
+        output_version_name = f"{current_version_name}-build{run_number}"
         new_version_code = current_version_code + 1
         should_commit = True
-        print(f"Push to main. Auto-incrementing version code to: {new_version_code}")
+        print(f"Push to main. Bumping version code to {new_version_code} and build version name to {output_version_name}")
         
     else:
         # Pull request or other events
+        new_version_name = current_version_name
+        output_version_name = f"{current_version_name}-build{run_number}"
         print("Trigger event does not require version bump commit in repository.")
         
     # Replace in file content
@@ -91,13 +101,14 @@ def main():
     with open(properties_path, "w") as f:
         f.write(content)
         
-    print(f"Updated properties to: Name={new_version_name}, Code={new_version_code}")
+    print(f"Updated properties file to: Name={new_version_name}, Code={new_version_code}")
+    print(f"Output build version: {output_version_name}")
     
     # Export outputs to GITHUB_OUTPUT
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         with open(github_output, "a") as f:
-            f.write(f"new_version_name={new_version_name}\n")
+            f.write(f"new_version_name={output_version_name}\n")
             f.write(f"new_version_code={new_version_code}\n")
             f.write(f"should_commit={'true' if should_commit else 'false'}\n")
 

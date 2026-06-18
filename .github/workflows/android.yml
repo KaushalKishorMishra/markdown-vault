@@ -91,10 +91,10 @@ jobs:
       run: |
         if [ "$RELEASE_KEYSTORE_BASE64" != "" ]; then
           echo "Building signed Release APK..."
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease -Papp.version.name="${{ steps.bump_version.outputs.new_version_name }}" -Papp.version.code="${{ steps.bump_version.outputs.new_version_code }}"
         else
           echo "No signing configuration found. Building Debug APK..."
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug -Papp.version.name="${{ steps.bump_version.outputs.new_version_name }}" -Papp.version.code="${{ steps.bump_version.outputs.new_version_code }}"
         fi
 
     - name: Locate Build Artifacts
@@ -114,13 +114,43 @@ jobs:
         name: "${{ steps.locate_artifacts.outputs.apk_name }}"
         path: "${{ steps.locate_artifacts.outputs.apk_path }}"
 
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        git fetch --tags
+        TAGS=$(git tag --sort=-v:refname)
+        CURRENT_TAG="v${{ steps.bump_version.outputs.new_version_name }}"
+        
+        PREV_TAG=""
+        if [ -n "$TAGS" ]; then
+          for t in $TAGS; do
+            if [ "$t" != "$CURRENT_TAG" ]; then
+              PREV_TAG="$t"
+              break
+            fi
+          done
+        fi
+        
+        echo "## What's Changed in Release ${{ steps.bump_version.outputs.new_version_name }}" > release_notes.md
+        if [ -z "$PREV_TAG" ]; then
+          echo "Initial release. Commit log:" >> release_notes.md
+          git log --pretty=format:"* %s (%h)" -n 15 >> release_notes.md
+        else
+          echo "Changes since $PREV_TAG:" >> release_notes.md
+          git log --pretty=format:"* %s (%h)" $PREV_TAG..HEAD >> release_notes.md
+        fi
+        
+        echo "Generated Release Notes:"
+        cat release_notes.md
+
     - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/v') || inputs.create_release == true
+      if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
       uses: softprops/action-gh-release@v2
       with:
         files: "${{ steps.locate_artifacts.outputs.apk_path }}"
         tag_name: "v${{ steps.bump_version.outputs.new_version_name }}"
         name: "Release v${{ steps.bump_version.outputs.new_version_name }}"
+        body_path: release_notes.md
         draft: false
         prerelease: false
         token: "${{ secrets.GITHUB_TOKEN }}"
