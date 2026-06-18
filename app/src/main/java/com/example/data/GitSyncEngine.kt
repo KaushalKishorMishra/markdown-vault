@@ -152,6 +152,11 @@ class GitSyncEngine(
                 for ((remotePath, remoteEntry) in remoteFilesMap) {
                     val localNote = localNotesMap[remotePath]
 
+                    if (localNote != null && localNote.syncStatus == "TRASHED") {
+                        Log.d(TAG, "Skipping remote sync for trashed note: $remotePath")
+                        continue
+                    }
+
                     if (localNote == null) {
                         // REMOTE-ONLY file: Download it!
                         Log.d(TAG, "Pulling new remote file: $remotePath")
@@ -247,33 +252,69 @@ class GitSyncEngine(
 
                     if (remoteEntryStatus == null) {
                         if (localNote.syncStatus == "LOCAL_ONLY" || localNote.remoteSha.isEmpty()) {
-                            // LOCAL ONLY: Push create!
-                            Log.d(TAG, "Uploading new local file: ${localNote.filePath}")
-                            val base64Content = Base64.encodeToString(localNote.content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-                            val updateRequest = UpdateFileRequest(
-                                message = "Sync create: ${localNote.title}",
-                                content = base64Content,
-                                sha = null,
-                                branch = vault.branch
-                            )
-                            val updateResponse = gitHubApi.createOrUpdateFile(authHeader, owner, repo, localNote.filePath, updateRequest)
-                            if (updateResponse.isSuccessful && updateResponse.body() != null) {
-                                val responseBody = updateResponse.body()!!
-                                val newSha = responseBody.content?.sha ?: ""
-                                val syncedNote = localNote.copy(
-                                    localSha = newSha,
-                                    remoteSha = newSha,
-                                    syncStatus = "SYNCED",
-                                    updatedAt = System.currentTimeMillis()
+                            if (localNote.syncStatus == "TRASHED") {
+                                val timeInTrash = System.currentTimeMillis() - localNote.updatedAt
+                                val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
+                                if (timeInTrash >= thirtyDaysMs) {
+                                    Log.d(TAG, "Purging local-only trashed note: ${localNote.filePath}")
+                                    noteDao.deleteNote(localNote)
+                                    deleteLocalFile(vault, localNote.filePath)
+                                    deleteLocalFile(vault, ".trash/${localNote.filePath}")
+                                }
+                            } else {
+                                // LOCAL ONLY: Push create!
+                                Log.d(TAG, "Uploading new local file: ${localNote.filePath}")
+                                val base64Content = Base64.encodeToString(localNote.content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                                val updateRequest = UpdateFileRequest(
+                                    message = "Sync create: ${localNote.title}",
+                                    content = base64Content,
+                                    sha = null,
+                                    branch = vault.branch
                                 )
-                                noteDao.insertNote(syncedNote)
-                                pushCount++
+                                val updateResponse = gitHubApi.createOrUpdateFile(authHeader, owner, repo, localNote.filePath, updateRequest)
+                                if (updateResponse.isSuccessful && updateResponse.body() != null) {
+                                    val responseBody = updateResponse.body()!!
+                                    val newSha = responseBody.content?.sha ?: ""
+                                    val syncedNote = localNote.copy(
+                                        localSha = newSha,
+                                        remoteSha = newSha,
+                                        syncStatus = "SYNCED",
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    noteDao.insertNote(syncedNote)
+                                    pushCount++
+                                }
                             }
-                        } else if (localNote.syncStatus == "DELETED") {
-                            // DELETED LOCALLY: Sync DELETE to remote
-                            Log.d(TAG, "Deleting remote file: ${localNote.filePath}")
+                        } else if (localNote.syncStatus == "DELETED" || localNote.syncStatus == "TRASHED") {
+                            // If it's deleted/trashed locally but already missing on GitHub, we can just purge it from our local database!
+                            Log.d(TAG, "Purging note missing from remote: ${localNote.filePath}")
+                            noteDao.deleteNote(localNote)
+                            deleteLocalFile(vault, localNote.filePath)
+                            deleteLocalFile(vault, ".trash/${localNote.filePath}")
+                        }
+                    } else if (localNote.syncStatus == "DELETED") {
+                        // DELETED LOCALLY: Sync DELETE to remote
+                        Log.d(TAG, "Deleting remote file: ${localNote.filePath}")
+                        val deleteRequest = DeleteFileRequest(
+                            message = "Sync delete: ${localNote.title}",
+                            sha = localNote.remoteSha,
+                            branch = vault.branch
+                        )
+                        val deleteResponse = gitHubApi.deleteFile(authHeader, owner, repo, localNote.filePath, deleteRequest)
+                        if (deleteResponse.isSuccessful) {
+                            noteDao.deleteNote(localNote)
+                            deleteLocalFile(vault, localNote.filePath)
+                            deleteLocalFile(vault, ".trash/${localNote.filePath}")
+                            pushCount++
+                        }
+                    } else if (localNote.syncStatus == "TRASHED") {
+                        // TRASHED LOCALLY (but exists on GitHub): check if 30 days have expired
+                        val timeInTrash = System.currentTimeMillis() - localNote.updatedAt
+                        val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
+                        if (timeInTrash >= thirtyDaysMs) {
+                            Log.d(TAG, "Deleting remote file for expired trashed note: ${localNote.filePath}")
                             val deleteRequest = DeleteFileRequest(
-                                message = "Sync delete: ${localNote.title}",
+                                message = "Sync delete (Trash Expiry): ${localNote.title}",
                                 sha = localNote.remoteSha,
                                 branch = vault.branch
                             )
@@ -281,25 +322,26 @@ class GitSyncEngine(
                             if (deleteResponse.isSuccessful) {
                                 noteDao.deleteNote(localNote)
                                 deleteLocalFile(vault, localNote.filePath)
+                                deleteLocalFile(vault, ".trash/${localNote.filePath}")
                                 pushCount++
                             }
+                        }
+                    } else {
+                        // Previously synced in GitHub but deleted from GitHub remote. Discard locally or mark conflict?
+                        // Standard behavior: Delete locally to keep in-sync, but let's back up to a conflict state if modified.
+                        if (localNote.syncStatus == "MODIFIED") {
+                            Log.w(TAG, "File was deleted on remote but edited locally: ${localNote.filePath}")
+                            val conflictNote = localNote.copy(
+                                syncStatus = "CONFLICT",
+                                remoteSha = ""
+                            )
+                            noteDao.insertNote(conflictNote)
+                            conflictCount++
                         } else {
-                            // Previously synced in GitHub but deleted from GitHub remote. Discard locally or mark conflict?
-                            // Standard behavior: Delete locally to keep in-sync, but let's back up to a conflict state if modified.
-                            if (localNote.syncStatus == "MODIFIED") {
-                                Log.w(TAG, "File was deleted on remote but edited locally: ${localNote.filePath}")
-                                val conflictNote = localNote.copy(
-                                    syncStatus = "CONFLICT",
-                                    remoteSha = ""
-                                )
-                                noteDao.insertNote(conflictNote)
-                                conflictCount++
-                            } else {
-                                Log.d(TAG, "File deleted from remote, purging locally: ${localNote.filePath}")
-                                noteDao.deleteNote(localNote)
-                                deleteLocalFile(vault, localNote.filePath)
-                                pullCount++
-                            }
+                            Log.d(TAG, "File deleted from remote, purging locally: ${localNote.filePath}")
+                            noteDao.deleteNote(localNote)
+                            deleteLocalFile(vault, localNote.filePath)
+                            pullCount++
                         }
                     }
                 }

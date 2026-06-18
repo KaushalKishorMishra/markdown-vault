@@ -49,7 +49,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         },
         _searchQuery
     ) { notes, query ->
-        val filtered = notes.filter { it.syncStatus != "DELETED" }
+        val filtered = notes.filter { it.syncStatus != "DELETED" && it.syncStatus != "TRASHED" }
         if (query.isEmpty()) {
             filtered
         } else {
@@ -60,6 +60,16 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val trashedNotesForActiveVault: StateFlow<List<Note>> = _activeVault.flatMapLatest { vault ->
+        if (vault != null) {
+            noteDao.getNotesForVaultFlow(vault.id).map { notes ->
+                notes.filter { it.syncStatus == "TRASHED" }
+            }
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Selected Note State
     private val _selectedNote = MutableStateFlow<Note?>(null)
@@ -163,14 +173,11 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val prefix = if (folderPath.endsWith("/")) folderPath else "$folderPath/"
             val allNotes = noteDao.getNotesForVault(vault.id)
-            val notesInFolder = allNotes.filter { it.filePath.startsWith(prefix) }
+            val notesInFolder = allNotes.filter { it.filePath.startsWith(prefix) && it.syncStatus != "DELETED" && it.syncStatus != "TRASHED" }
             
             notesInFolder.forEach { note ->
-                if (note.syncStatus == "LOCAL_ONLY") {
-                    noteDao.deleteNote(note)
-                } else {
-                    noteDao.insertNote(note.copy(syncStatus = "DELETED"))
-                }
+                moveFileToTrashDisk(vault, note.filePath)
+                noteDao.insertNote(note.copy(syncStatus = "TRASHED", updatedAt = System.currentTimeMillis()))
             }
             
             val activeNote = _selectedNote.value
@@ -350,24 +357,19 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteSelectedNote() {
         val note = _selectedNote.value ?: return
+        val vault = _activeVault.value ?: return
         viewModelScope.launch {
-            if (note.syncStatus == "LOCAL_ONLY") {
-                noteDao.deleteNote(note)
-            } else {
-                // Soft delete to let GitHub Sync handle remote removal
-                noteDao.insertNote(note.copy(syncStatus = "DELETED"))
-            }
+            moveFileToTrashDisk(vault, note.filePath)
+            noteDao.insertNote(note.copy(syncStatus = "TRASHED", updatedAt = System.currentTimeMillis()))
             _selectedNote.value = null
         }
     }
 
     fun deleteNote(note: Note) {
+        val vault = _activeVault.value ?: return
         viewModelScope.launch {
-            if (note.syncStatus == "LOCAL_ONLY") {
-                noteDao.deleteNote(note)
-            } else {
-                noteDao.insertNote(note.copy(syncStatus = "DELETED"))
-            }
+            moveFileToTrashDisk(vault, note.filePath)
+            noteDao.insertNote(note.copy(syncStatus = "TRASHED", updatedAt = System.currentTimeMillis()))
             if (_selectedNote.value?.id == note.id) {
                 _selectedNote.value = null
             }
@@ -430,6 +432,87 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         val note = _selectedNote.value ?: return
         viewModelScope.launch {
             syncEngine.resolveConflict(note.id, resolution, mergedText)
+        }
+    }
+
+    private fun getVaultDirectory(vault: Vault): File {
+        val baseDir = getApplication<Application>().getExternalFilesDir(null) ?: getApplication<Application>().filesDir
+        val vaultDirName = vault.name.filter { it.isLetterOrDigit() || it == '_' || it == '-' }
+        val vaultDir = File(baseDir, vaultDirName)
+        if (!vaultDir.exists()) vaultDir.mkdirs()
+        return vaultDir
+    }
+
+    private fun moveFileToTrashDisk(vault: Vault, filePath: String) {
+        try {
+            val vaultDir = getVaultDirectory(vault)
+            val sourceFile = File(vaultDir, filePath)
+            if (sourceFile.exists()) {
+                val trashFile = File(vaultDir, ".trash/$filePath")
+                trashFile.parentFile?.mkdirs()
+                sourceFile.renameTo(trashFile)
+                if (!trashFile.exists()) {
+                    sourceFile.copyTo(trashFile, overwrite = true)
+                    sourceFile.delete()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun restoreFileFromTrashDisk(vault: Vault, filePath: String) {
+        try {
+            val vaultDir = getVaultDirectory(vault)
+            val trashFile = File(vaultDir, ".trash/$filePath")
+            if (trashFile.exists()) {
+                val destFile = File(vaultDir, filePath)
+                destFile.parentFile?.mkdirs()
+                trashFile.renameTo(destFile)
+                if (!destFile.exists()) {
+                    trashFile.copyTo(destFile, overwrite = true)
+                    trashFile.delete()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun deleteFilePermanentlyDisk(vault: Vault, filePath: String) {
+        try {
+            val vaultDir = getVaultDirectory(vault)
+            val sourceFile = File(vaultDir, filePath)
+            if (sourceFile.exists()) sourceFile.delete()
+            val trashFile = File(vaultDir, ".trash/$filePath")
+            if (trashFile.exists()) trashFile.delete()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun restoreNote(note: Note) {
+        val vault = _activeVault.value ?: return
+        viewModelScope.launch {
+            restoreFileFromTrashDisk(vault, note.filePath)
+            val originalStatus = if (note.remoteSha.isEmpty()) "LOCAL_ONLY" else "MODIFIED"
+            val restoredNote = note.copy(
+                syncStatus = originalStatus,
+                updatedAt = System.currentTimeMillis()
+            )
+            noteDao.insertNote(restoredNote)
+        }
+    }
+
+    fun deleteNotePermanently(note: Note) {
+        val vault = _activeVault.value ?: return
+        viewModelScope.launch {
+            deleteFilePermanentlyDisk(vault, note.filePath)
+            if (note.remoteSha.isEmpty() || note.syncStatus == "LOCAL_ONLY") {
+                noteDao.deleteNote(note)
+            } else {
+                noteDao.insertNote(note.copy(syncStatus = "DELETED", updatedAt = System.currentTimeMillis()))
+            }
         }
     }
 }

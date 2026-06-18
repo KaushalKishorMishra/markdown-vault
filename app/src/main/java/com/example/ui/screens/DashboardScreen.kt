@@ -41,6 +41,9 @@ import com.example.ui.components.MathView
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.VaultViewModel
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.Date
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -80,6 +83,7 @@ fun DashboardScreen(
     var showSettingsScreen by remember { mutableStateOf(false) }
     var showVaultSettingsMenu by remember { mutableStateOf(false) }
     var showAddFolderDialog by remember { mutableStateOf(false) }
+    var showSyncConfirmationDialog by remember { mutableStateOf(false) }
 
     // Drawer state (for mobile)
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -168,8 +172,14 @@ fun DashboardScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    val statusText = when (selectedNote!!.syncStatus) {
+                                        "SYNCED" -> "Synced"
+                                        "MODIFIED" -> "Modified locally"
+                                        "LOCAL_ONLY" -> "Local only"
+                                        else -> selectedNote!!.syncStatus
+                                    }
                                     Text(
-                                        text = selectedNote!!.filePath,
+                                        text = "$statusText • ${selectedNote!!.filePath}",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         maxLines = 1,
@@ -209,8 +219,19 @@ fun DashboardScreen(
                             }
                         },
                         actions = {
-                            if (!showSettingsScreen && activeVault != null) {
-                                // Sync indicator and trigger button
+                            if (showSettingsScreen) {
+                                // No actions on settings screen
+                            } else if (selectedNote != null) {
+                                // Delete Note
+                                IconButton(onClick = { viewModel.deleteSelectedNote() }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Note",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                    )
+                                }
+                            } else if (activeVault != null) {
+                                // Sync indicator and trigger button (with confirmation dialog)
                                 when (syncState) {
                                     is SyncState.Syncing -> {
                                         CircularProgressIndicator(
@@ -221,7 +242,7 @@ fun DashboardScreen(
                                         Spacer(modifier = Modifier.width(12.dp))
                                     }
                                     else -> {
-                                        IconButton(onClick = { viewModel.triggerSync() }) {
+                                        IconButton(onClick = { showSyncConfirmationDialog = true }) {
                                             Icon(
                                                 imageVector = Icons.Default.Refresh,
                                                 contentDescription = "Sync Vault",
@@ -388,7 +409,8 @@ fun DashboardScreen(
                             onVaultDelete = { vault ->
                                 viewModel.deleteVault(vault)
                             },
-                            onAddVaultClick = { showAddVaultDialog = true }
+                            onAddVaultClick = { showAddVaultDialog = true },
+                            viewModel = viewModel
                         )
                     } else if (selectedNote == null) {
                         if (activeVault != null) {
@@ -404,7 +426,11 @@ fun DashboardScreen(
                                 onRenameNote = { note, title, name -> viewModel.renameNote(note, title, name) },
                                 onDeleteNote = { viewModel.deleteNote(it) },
                                 searchQuery = searchQuery,
-                                onSearchChange = { viewModel.setSearchQuery(it) }
+                                onSearchChange = { viewModel.setSearchQuery(it) },
+                                syncState = syncState,
+                                isGitConfigured = isGitConfigured,
+                                onSyncClick = { showSyncConfirmationDialog = true },
+                                onGitConfigClick = { showSettingsScreen = true }
                             )
                         } else {
                             EmptyWorkspaceArea(
@@ -422,12 +448,10 @@ fun DashboardScreen(
                             isTabletLayout = isTablet,
                             syncState = syncState,
                             onContentChange = { viewModel.updateSelectedNoteContent(it) },
-                            onEditToggle = { viewModel.setEditMode(it) },
-                            onDeleteClick = { viewModel.deleteSelectedNote() },
+                            onEditModeChange = { viewModel.setEditMode(it) },
                             onResolveConflict = { resolution, mergedText ->
                                 viewModel.resolveMergeConflict(resolution, mergedText)
-                            },
-                            onBackClick = { viewModel.selectNote(null) }
+                            }
                         )
                     }
                 }
@@ -485,9 +509,61 @@ fun DashboardScreen(
         )
     }
 
-
-
-
+    if (showSyncConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { showSyncConfirmationDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("Sync Vault Workspace", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "This will synchronize your local notes and folders with the remote GitHub repository.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (activeVault != null) {
+                        Text(
+                            text = "Repository: ${activeVault!!.gitRepo}\nBranch: ${activeVault!!.branch}",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.triggerSync()
+                        showSyncConfirmationDialog = false
+                    },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Sync Now")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSyncConfirmationDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 // --- Inner Sidebar Section ---
@@ -820,10 +896,8 @@ fun NoteWorkspace(
     isTabletLayout: Boolean,
     syncState: SyncState,
     onContentChange: (String) -> Unit,
-    onEditToggle: (Boolean) -> Unit,
-    onDeleteClick: () -> Unit,
-    onResolveConflict: (String, String) -> Unit,
-    onBackClick: () -> Unit
+    onEditModeChange: (Boolean) -> Unit,
+    onResolveConflict: (String, String) -> Unit
 ) {
     if (note.syncStatus == "CONFLICT") {
         // Show Conflict Resolution Overlay
@@ -834,122 +908,75 @@ fun NoteWorkspace(
             }
         )
     } else {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Note Top Command Bar
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
-            ) {
-                // File info + status
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onBackClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Close Note",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    val statusText = when (note.syncStatus) {
-                        "SYNCED" -> "Synced"
-                        "MODIFIED" -> "Modified locally"
-                        "LOCAL_ONLY" -> "Local only"
-                        else -> note.syncStatus
-                    }
-                    val statusColor = when (note.syncStatus) {
-                        "SYNCED" -> Emerald500
-                        "MODIFIED" -> Sky400
-                        "LOCAL_ONLY" -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        else -> MaterialTheme.colorScheme.onSurface
-                    }
-
-                    Box(
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Mode Selector (only on phone/mobile)
+            if (!isTabletLayout) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Row(
                         modifier = Modifier
-                            .size(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(statusColor)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "$statusText • ${note.filePath}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Actions (Delete)
-                    IconButton(
-                        onClick = onDeleteClick,
-                        modifier = Modifier.size(32.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
+                            .padding(2.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete Note",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    // Mode Toggle (Only show on Phone)
-                    if (!isTabletLayout) {
-                        Row(
+                        Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surface)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (!isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { onEditModeChange(false) }
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Preview",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (!isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (!isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { onEditToggle(false) }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                            Text(
-                                text = "Edit",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { onEditToggle(true) }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Visibility,
+                                    contentDescription = "Preview",
+                                    tint = if (!isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Preview",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (!isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
-                    } else {
-                        // On Tablet, it's always in side-by-side mode! Display informative notice
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { onEditModeChange(true) }
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Side-by-Side Dual Deck Mode",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit",
+                                    tint = if (isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Edit",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
             }
-
-            // Workspace Panels Area
+            
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -966,7 +993,7 @@ fun NoteWorkspace(
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
-                        Divider(
+                        HorizontalDivider(
                             modifier = Modifier
                                 .fillMaxHeight()
                                 .width(1.dp),
@@ -1611,7 +1638,8 @@ fun SettingsScreen(
     activeVault: Vault?,
     onVaultSelect: (Vault) -> Unit,
     onVaultDelete: (Vault) -> Unit,
-    onAddVaultClick: () -> Unit
+    onAddVaultClick: () -> Unit,
+    viewModel: VaultViewModel
 ) {
     var user by remember { mutableStateOf(currentUsername) }
     var token by remember { mutableStateOf(currentToken) }
@@ -1871,6 +1899,109 @@ fun SettingsScreen(
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Trash / Recently Deleted Section (Trash Bin)
+        val trashedNotes by viewModel.trashedNotesForActiveVault.collectAsStateWithLifecycle()
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Recently Deleted (Trash Bin)".uppercase(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "Items in the trash will be permanently deleted and synced as deleted after 30 days.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (trashedNotes.isEmpty()) {
+                    Text(
+                        text = "Trash is empty",
+                        fontSize = 12.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        trashedNotes.forEach { note ->
+                            val timeDiff = System.currentTimeMillis() - note.updatedAt
+                            val daysLeft = 30 - (timeDiff / (24L * 60 * 60 * 1000)).toInt()
+                            val daysText = if (daysLeft <= 0) "Expired (Deleting soon)" else "$daysLeft days left"
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = note.title,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${note.filePath} • $daysText",
+                                            fontSize = 10.sp,
+                                            color = if (daysLeft < 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        IconButton(
+                                            onClick = { viewModel.restoreNote(note) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Restore,
+                                                contentDescription = "Restore",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                        IconButton(
+                                            onClick = { viewModel.deleteNotePermanently(note) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.DeleteForever,
+                                                contentDescription = "Delete Permanently",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(18.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -2262,7 +2393,11 @@ fun FolderExplorer(
     onRenameNote: (Note, String, String) -> Unit,
     onDeleteNote: (Note) -> Unit,
     searchQuery: String,
-    onSearchChange: (String) -> Unit
+    onSearchChange: (String) -> Unit,
+    syncState: SyncState,
+    isGitConfigured: Boolean,
+    onSyncClick: () -> Unit,
+    onGitConfigClick: () -> Unit
 ) {
     val currentPrefix = if (currentPath.isEmpty()) "" else "$currentPath/"
 
@@ -2328,6 +2463,157 @@ fun FolderExplorer(
                 .fillMaxWidth()
                 .padding(bottom = 12.dp)
         )
+
+        // Premium Git Sync & Workspace Status Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .border(
+                    width = 1.dp,
+                    color = when (syncState) {
+                        is SyncState.Syncing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        is SyncState.Success -> Emerald500.copy(alpha = 0.5f)
+                        is SyncState.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                    },
+                    shape = RoundedCornerShape(16.dp)
+                ),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            when (syncState) {
+                                is SyncState.Syncing -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                is SyncState.Success -> Emerald500.copy(alpha = 0.15f)
+                                is SyncState.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                                else -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = when (syncState) {
+                            is SyncState.Syncing -> MaterialTheme.colorScheme.primary
+                            is SyncState.Success -> Emerald500
+                            is SyncState.Error -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.secondary
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isGitConfigured) "GitHub Cloud Synchronizer" else "GitHub Sync Pending Setup",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    val detailText = if (isGitConfigured) {
+                        val repoName = activeVault.gitRepo
+                        val branch = activeVault.branch
+                        "Repo: $repoName • Branch: $branch"
+                    } else {
+                        "Sync notes to/from GitHub repository automatically"
+                    }
+                    
+                    Text(
+                        text = detailText,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    
+                    if (isGitConfigured) {
+                        val lastSyncedVal = activeVault.lastSynced
+                        val lastSyncedText = if (lastSyncedVal == 0L) {
+                            "Never synced yet"
+                        } else {
+                            val diff = System.currentTimeMillis() - lastSyncedVal
+                            if (diff < 60_000L) {
+                                "Just synced"
+                            } else {
+                                val minutes = diff / 60_000L
+                                if (minutes < 60) {
+                                    "$minutes m ago"
+                                } else {
+                                    val hours = minutes / 60
+                                    if (hours < 24) {
+                                        "$hours h ago"
+                                    } else {
+                                        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(lastSyncedVal))
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Text(
+                            text = "Last sync: $lastSyncedText",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                if (isGitConfigured) {
+                    if (syncState is SyncState.Syncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Button(
+                            onClick = { onSyncClick() },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("Sync", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { onGitConfigClick() },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("Setup", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
 
         // 2. Navigation Header / Breadcrumbs (Only show if not searching)
         if (searchQuery.isEmpty()) {
