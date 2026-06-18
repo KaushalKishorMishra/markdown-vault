@@ -77,9 +77,8 @@ fun DashboardScreen(
     // Dialog state
     var showAddVaultDialog by remember { mutableStateOf(false) }
     var showAddNoteDialog by remember { mutableStateOf(false) }
-    var showGitConfigDialog by remember { mutableStateOf(false) }
+    var showSettingsScreen by remember { mutableStateOf(false) }
     var showVaultSettingsMenu by remember { mutableStateOf(false) }
-    var showVaultManagerDialog by remember { mutableStateOf(false) }
     var showAddFolderDialog by remember { mutableStateOf(false) }
 
     // Drawer state (for mobile)
@@ -98,24 +97,17 @@ fun DashboardScreen(
                     SidebarContent(
                         vaults = vaults,
                         activeVault = activeVault,
-                        notes = notes,
-                        selectedNote = selectedNote,
-                        searchQuery = searchQuery,
-                        gitUser = gitUser,
-                        isGitConfigured = isGitConfigured,
                         onVaultSelect = {
                             viewModel.selectVault(it)
-                            coroutineScope.launch { drawerState.close() }
-                        },
-                        onNoteSelect = {
-                            viewModel.selectNote(it)
+                            showSettingsScreen = false
                             coroutineScope.launch { drawerState.close() }
                         },
                         onAddVaultClick = { showAddVaultDialog = true },
-                        onManageVaultsClick = { showVaultManagerDialog = true },
-                        onAddNoteClick = { showAddNoteDialog = true },
-                        onSearchChange = { viewModel.setSearchQuery(it) },
-                        onGitConfigClick = { showGitConfigDialog = true }
+                        onSettingsClick = {
+                            showSettingsScreen = true
+                            viewModel.selectNote(null)
+                            coroutineScope.launch { drawerState.close() }
+                        }
                     )
                 }
             }
@@ -137,18 +129,15 @@ fun DashboardScreen(
                     SidebarContent(
                         vaults = vaults,
                         activeVault = activeVault,
-                        notes = notes,
-                        selectedNote = selectedNote,
-                        searchQuery = searchQuery,
-                        gitUser = gitUser,
-                        isGitConfigured = isGitConfigured,
-                        onVaultSelect = { viewModel.selectVault(it) },
-                        onNoteSelect = { viewModel.selectNote(it) },
+                        onVaultSelect = {
+                            viewModel.selectVault(it)
+                            showSettingsScreen = false
+                        },
                         onAddVaultClick = { showAddVaultDialog = true },
-                        onManageVaultsClick = { showVaultManagerDialog = true },
-                        onAddNoteClick = { showAddNoteDialog = true },
-                        onSearchChange = { viewModel.setSearchQuery(it) },
-                        onGitConfigClick = { showGitConfigDialog = true }
+                        onSettingsClick = {
+                            showSettingsScreen = true
+                            viewModel.selectNote(null)
+                        }
                     )
                 }
                 Divider(
@@ -165,7 +154,13 @@ fun DashboardScreen(
                     CenterAlignedTopAppBar(
                         title = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                if (selectedNote != null) {
+                                if (showSettingsScreen) {
+                                    Text(
+                                        text = "Settings",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                } else if (selectedNote != null) {
                                     Text(
                                         text = selectedNote!!.title,
                                         fontSize = 16.sp,
@@ -199,7 +194,11 @@ fun DashboardScreen(
                             }
                         },
                         navigationIcon = {
-                            if (selectedNote != null) {
+                            if (showSettingsScreen) {
+                                IconButton(onClick = { showSettingsScreen = false }) {
+                                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                                }
+                            } else if (selectedNote != null) {
                                 IconButton(onClick = { viewModel.selectNote(null) }) {
                                     Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back to Folder Explorer")
                                 }
@@ -210,7 +209,7 @@ fun DashboardScreen(
                             }
                         },
                         actions = {
-                            if (activeVault != null) {
+                            if (!showSettingsScreen && activeVault != null) {
                                 // Sync indicator and trigger button
                                 when (syncState) {
                                     is SyncState.Syncing -> {
@@ -260,7 +259,7 @@ fun DashboardScreen(
                     )
                 },
                 floatingActionButton = {
-                    if (selectedNote == null && activeVault != null) {
+                    if (selectedNote == null && activeVault != null && !showSettingsScreen) {
                         var showFabMenu by remember { mutableStateOf(false) }
                         Column(
                             horizontalAlignment = Alignment.End,
@@ -348,7 +347,50 @@ fun DashboardScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    if (selectedNote == null) {
+                    if (showSettingsScreen) {
+                        val gitName by viewModel.gitName.collectAsStateWithLifecycle()
+                        val gitEmail by viewModel.gitEmail.collectAsStateWithLifecycle()
+                        val gitAvatarUrl by viewModel.gitAvatarUrl.collectAsStateWithLifecycle()
+                        val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
+
+                        SettingsScreen(
+                            currentUsername = gitUser,
+                            currentToken = gitToken,
+                            currentName = gitName,
+                            currentEmail = gitEmail,
+                            currentAvatarUrl = gitAvatarUrl,
+                            isBackgroundSyncEnabled = isBackgroundSyncEnabled,
+                            onToggleBackgroundSync = { enabled ->
+                                viewModel.toggleBackgroundSync(enabled)
+                            },
+                            selectedTheme = selectedTheme,
+                            onSelectTheme = { theme ->
+                                viewModel.selectTheme(theme)
+                            },
+                            onConfirm = { user, token ->
+                                viewModel.updateGitCredentials(user, token)
+                                showSettingsScreen = false
+                            },
+                            onClear = {
+                                viewModel.clearGitCredentials()
+                                showSettingsScreen = false
+                            },
+                            onCheckStatus = { user, token ->
+                                viewModel.syncEngine.testConnection(user, token)
+                            },
+                            onBackClick = { showSettingsScreen = false },
+                            vaults = vaults,
+                            activeVault = activeVault,
+                            onVaultSelect = { vault ->
+                                viewModel.selectVault(vault)
+                                showSettingsScreen = false
+                            },
+                            onVaultDelete = { vault ->
+                                viewModel.deleteVault(vault)
+                            },
+                            onAddVaultClick = { showAddVaultDialog = true }
+                        )
+                    } else if (selectedNote == null) {
                         if (activeVault != null) {
                             FolderExplorer(
                                 activeVault = activeVault!!,
@@ -369,7 +411,7 @@ fun DashboardScreen(
                                 activeVault = null,
                                 notesCount = 0,
                                 onAddNoteClick = { showAddNoteDialog = true },
-                                onGitConfigClick = { showGitConfigDialog = true },
+                                onGitConfigClick = { showSettingsScreen = true },
                                 isGitConfigured = isGitConfigured
                             )
                         }
@@ -443,59 +485,9 @@ fun DashboardScreen(
         )
     }
 
-    if (showGitConfigDialog) {
-        val gitName by viewModel.gitName.collectAsStateWithLifecycle()
-        val gitEmail by viewModel.gitEmail.collectAsStateWithLifecycle()
-        val gitAvatarUrl by viewModel.gitAvatarUrl.collectAsStateWithLifecycle()
-        val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
 
-        GitCredentialsDialog(
-            currentUsername = gitUser,
-            currentToken = gitToken,
-            currentName = gitName,
-            currentEmail = gitEmail,
-            currentAvatarUrl = gitAvatarUrl,
-            isBackgroundSyncEnabled = isBackgroundSyncEnabled,
-            onToggleBackgroundSync = { enabled ->
-                viewModel.toggleBackgroundSync(enabled)
-            },
-            selectedTheme = selectedTheme,
-            onSelectTheme = { theme ->
-                viewModel.selectTheme(theme)
-            },
-            onDismiss = { showGitConfigDialog = false },
-            onConfirm = { user, token ->
-                viewModel.updateGitCredentials(user, token)
-                showGitConfigDialog = false
-            },
-            onClear = {
-                viewModel.clearGitCredentials()
-                showGitConfigDialog = false
-            },
-            onCheckStatus = { user, token ->
-                viewModel.syncEngine.testConnection(user, token)
-            }
-        )
-    }
 
-    if (showVaultManagerDialog) {
-        VaultManagerDialog(
-            vaults = vaults,
-            activeVault = activeVault,
-            onDismiss = { showVaultManagerDialog = false },
-            onSelect = { v ->
-                viewModel.selectVault(v)
-                showVaultManagerDialog = false
-            },
-            onDelete = { v ->
-                viewModel.deleteVault(v)
-            },
-            onAddNewVaultSpace = {
-                showVaultManagerDialog = false
-                showAddVaultDialog = true
-            }
-        )
-    }
+
 }
 
 // --- Inner Sidebar Section ---
@@ -505,36 +497,11 @@ fun DashboardScreen(
 fun SidebarContent(
     vaults: List<Vault>,
     activeVault: Vault?,
-    notes: List<Note>,
-    selectedNote: Note?,
-    searchQuery: String,
-    gitUser: String,
-    isGitConfigured: Boolean,
     onVaultSelect: (Vault) -> Unit,
-    onNoteSelect: (Note) -> Unit,
     onAddVaultClick: () -> Unit,
-    onManageVaultsClick: () -> Unit,
-    onAddNoteClick: () -> Unit,
-    onSearchChange: (String) -> Unit,
-    onGitConfigClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isVaultDropdownExpanded by remember { mutableStateOf(false) }
-
-    val groupedNotes = remember(notes) {
-        notes.groupBy { note ->
-            if (note.filePath.contains("/")) {
-                note.filePath.substringBeforeLast("/")
-            } else {
-                ""
-            }
-        }
-    }
-    var expandedFolders by remember { mutableStateOf(setOf<String>()) }
-    LaunchedEffect(groupedNotes) {
-        expandedFolders = groupedNotes.keys.toSet()
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -549,8 +516,8 @@ fun SidebarContent(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
                     .background(
                         Brush.linearGradient(
                             listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
@@ -562,143 +529,55 @@ fun SidebarContent(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "GitVault",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    letterSpacing = (-0.5).sp
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(Emerald500)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "AES-256 PROTECTED",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Emerald500.copy(alpha = 0.9f),
-                        letterSpacing = 1.sp
-                    )
-                }
-            }
-        }
-
-        // Active Vaults Section Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
             Text(
-                text = "Active Vaults".uppercase(),
-                fontSize = 11.sp,
+                text = "GitVault",
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                letterSpacing = 1.sp
-            )
-            Text(
-                text = "Manage",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { onManageVaultsClick() }
+                color = MaterialTheme.colorScheme.onSurface,
+                letterSpacing = (-0.5).sp
             )
         }
 
-        // Horizontal Vault Cards Row & Selection Menu
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp)
+        // Vertical List of Vaults (Google Files Style Navigation Drawer)
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f)
         ) {
-            DropdownMenu(
-                expanded = isVaultDropdownExpanded,
-                onDismissRequest = { isVaultDropdownExpanded = false },
-                modifier = Modifier.fillMaxWidth(0.8f)
-            ) {
-                if (vaults.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("No vaults found", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) },
-                        onClick = {}
+            if (vaults.isEmpty()) {
+                item {
+                    Text(
+                        text = "No vaults found. Connect a workspace below!",
+                        fontSize = 12.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(vertical = 12.dp)
                     )
-                } else {
-                    vaults.forEach { v ->
-                        DropdownMenuItem(
-                            text = { Text(v.name) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = if (v.id == activeVault?.id) Icons.Default.CheckCircle else Icons.Default.List,
-                                    contentDescription = null,
-                                    tint = if (v.id == activeVault?.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            },
-                            onClick = {
-                                onVaultSelect(v)
-                                isVaultDropdownExpanded = false
-                            }
-                        )
-                    }
                 }
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                    thickness = 1.dp
-                )
-                DropdownMenuItem(
-                    text = { Text("Create New Vault", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) },
-                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                    onClick = {
-                        onAddVaultClick()
-                        isVaultDropdownExpanded = false
-                    }
-                )
-            }
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            } else {
                 items(vaults) { v ->
                     val isActive = v.id == activeVault?.id
-                    Box(
-                        modifier = Modifier
-                            .width(148.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(
-                                width = if (isActive) 1.5.dp else 1.dp,
-                                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(20.dp)
-                            )
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onVaultSelect(v) }
-                            .padding(14.dp)
-                            .then(
-                                if (!isActive) Modifier.alpha(0.7f) else Modifier
-                            )
+                    Surface(
+                        onClick = { onVaultSelect(v) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = if (isActive) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column {
-                            // Icon Box
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(32.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(
-                                        if (isActive) MaterialTheme.colorScheme.primaryContainer 
-                                        else MaterialTheme.colorScheme.surface
+                                        if (isActive) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -710,355 +589,123 @@ fun SidebarContent(
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = null,
-                                    tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = v.name,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            val cleanDisplayRepo = v.gitRepo.substringAfter("github.com/")
-                            Text(
-                                text = if (v.vaultType == "LOGSEQ") "Logseq • $cleanDisplayRepo" else if (v.vaultType == "OBSIDIAN") "Obsidian • $cleanDisplayRepo" else "Flat • $cleanDisplayRepo",
-                                fontSize = 9.sp,
-                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-
-                // Append an elegant placeholder card to quickly add more vault spaces
-                item {
-                    Box(
-                        modifier = Modifier
-                            .width(110.dp)
-                            .height(98.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                shape = RoundedCornerShape(20.dp)
-                            )
-                            .background(Color.Transparent)
-                            .clickable { onAddVaultClick() }
-                            .padding(14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "New Space",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = v.name,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = v.gitRepo,
+                                    fontSize = 9.sp,
+                                    color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (isActive) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Active Workspace",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (activeVault != null) {
-            // Search Box and Note Count
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchChange,
-                placeholder = { Text("Search workspace...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                maxLines = 1,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            )
-
-            // Header for notes matching search, plus a New Note button
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp, horizontal = 2.dp)
-            ) {
-                Text(
-                    text = "VAULT FILES (${notes.size})",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                )
-                IconButton(
-                    onClick = onAddNoteClick,
-                    modifier = Modifier.size(24.dp)
+            // Connection action item inside the list
+            item {
+                Surface(
+                    onClick = onAddVaultClick,
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AddCircle,
-                        contentDescription = "Create Note",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            // List of Notes
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                if (notes.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (searchQuery.isNotEmpty()) "No matching notes found" else "Vault is empty. Create a file!",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Connect New Vault",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-                } else {
-                    groupedNotes.forEach { (folderPath, folderNotes) ->
-                        if (folderPath.isNotEmpty()) {
-                            val isExpanded = expandedFolders.contains(folderPath)
-                            item(key = "dir:$folderPath") {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            expandedFolders = if (isExpanded) {
-                                                expandedFolders - folderPath
-                                            } else {
-                                                expandedFolders + folderPath
-                                            }
-                                        }
-                                        .padding(vertical = 6.dp, horizontal = 4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(
-                                        imageVector = Icons.Default.Folder,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = folderPath,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Text(
-                                        text = "${folderNotes.size}",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                        modifier = Modifier.padding(end = 4.dp)
-                                    )
-                                }
-                            }
-                            if (isExpanded) {
-                                items(folderNotes, key = { it.id }) { note ->
-                                    Row(modifier = Modifier.fillMaxWidth()) {
-                                        Spacer(modifier = Modifier.width(20.dp)) // Indent files inside folder
-                                        val isSelected = selectedNote?.id == note.id
-                                        val syncColor = when (note.syncStatus) {
-                                            "SYNCED" -> Emerald500
-                                            "MODIFIED" -> Sky400
-                                            "CONFLICT" -> Amber500
-                                            "LOCAL_ONLY" -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                        Surface(
-                                            onClick = { onNoteSelect(note) },
-                                            shape = RoundedCornerShape(14.dp),
-                                            color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
-                                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(7.dp)
-                                                        .clip(RoundedCornerShape(3.dp))
-                                                        .background(syncColor)
-                                                )
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = note.title,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Text(
-                                                        text = note.filePath.substringAfterLast("/"),
-                                                        fontSize = 10.sp,
-                                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            // Root files
-                            items(folderNotes, key = { it.id }) { note ->
-                                val isSelected = selectedNote?.id == note.id
-                                val syncColor = when (note.syncStatus) {
-                                    "SYNCED" -> Emerald500
-                                    "MODIFIED" -> Sky400
-                                    "CONFLICT" -> Amber500
-                                    "LOCAL_ONLY" -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                                Surface(
-                                    onClick = { onNoteSelect(note) },
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
-                                    border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(7.dp)
-                                                .clip(RoundedCornerShape(3.dp))
-                                                .background(syncColor)
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = note.title,
-                                                fontSize = 13.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = note.filePath,
-                                                fontSize = 10.sp,
-                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            // Empty state for sidebar
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Create or select a vault\nto begin note-taking.",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
                 }
             }
         }
 
-        Divider(modifier = Modifier.padding(vertical = 12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Secure GitHub Credentials Status Footer
+        // Settings Entry Button at the bottom
         Surface(
-            onClick = onGitConfigClick,
+            onClick = onSettingsClick,
             shape = RoundedCornerShape(12.dp),
-            color = if (isGitConfigured) Emerald500.copy(alpha = 0.12f) else MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(10.dp)
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
                 Icon(
-                    imageVector = if (isGitConfigured) Icons.Default.CheckCircle else Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = if (isGitConfigured) Emerald500 else MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (isGitConfigured) "GitHub Authorized" else "GitHub Authorization Pending",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isGitConfigured) Emerald500 else MaterialTheme.colorScheme.error
-                    )
-                    Text(
-                        text = if (isGitConfigured) "@$gitUser" else "Tap here to configure PAT",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                    )
-                }
-                Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(14.dp)
+                    contentDescription = "Settings",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Settings",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // App Version text dynamically parsed from context package details
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val appVersion = remember {
+            try {
+                val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                pInfo.versionName ?: "0.0.0"
+            } catch (e: Exception) {
+                "0.0.0"
+            }
+        }
+        Text(
+            text = "Version $appVersion",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
     }
 }
 
@@ -1944,11 +1591,9 @@ fun ConflictResolver(
     }
 }
 
-// --- Credentials Dialog ---
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GitCredentialsDialog(
+fun SettingsScreen(
     currentUsername: String,
     currentToken: String,
     currentName: String,
@@ -1958,10 +1603,15 @@ fun GitCredentialsDialog(
     onToggleBackgroundSync: (Boolean) -> Unit,
     selectedTheme: String,
     onSelectTheme: (String) -> Unit,
-    onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit,
     onClear: () -> Unit,
-    onCheckStatus: suspend (String, String) -> Boolean
+    onCheckStatus: suspend (String, String) -> Boolean,
+    onBackClick: () -> Unit,
+    vaults: List<Vault>,
+    activeVault: Vault?,
+    onVaultSelect: (Vault) -> Unit,
+    onVaultDelete: (Vault) -> Unit,
+    onAddVaultClick: () -> Unit
 ) {
     var user by remember { mutableStateOf(currentUsername) }
     var token by remember { mutableStateOf(currentToken) }
@@ -1970,87 +1620,277 @@ fun GitCredentialsDialog(
     var connectionStatus by remember { mutableStateOf(if (currentToken.isNotEmpty()) "Configured" else "Unconfigured") }
     var isChecking by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text("Workspace & Git Settings")
-            }
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // User Profile Section
+        if (currentToken.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(16.dp)
             ) {
-                // User Profile Section
-                if (currentToken.isNotEmpty()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                if (currentAvatarUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = currentAvatarUrl,
+                        contentDescription = "GitHub Avatar",
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(12.dp)
+                            .size(64.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (currentAvatarUrl.isNotEmpty()) {
-                            AsyncImage(
-                                model = currentAvatarUrl,
-                                contentDescription = "GitHub Avatar",
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .border(2.dp, MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                val initials = (currentName.ifEmpty { currentUsername }).take(2).uppercase()
-                                Text(
-                                    text = initials,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = currentName.ifEmpty { currentUsername },
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            if (currentEmail.isNotEmpty()) {
-                                Text(
-                                    text = currentEmail,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                text = "@$currentUsername",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        val initials = (currentName.ifEmpty { currentUsername }).take(2).uppercase()
+                        Text(
+                            text = initials,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = currentName.ifEmpty { currentUsername },
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (currentEmail.isNotEmpty()) {
+                        Text(
+                            text = currentEmail,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "@$currentUsername",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
+        // Vault Workspaces Section (Google Files style, inline delete configuration)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Vault Workspaces".uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        letterSpacing = 1.sp
+                    )
+                    TextButton(
+                        onClick = onAddVaultClick,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Connect New", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                // Theme Selection Section
+                if (vaults.isEmpty()) {
+                    Text(
+                        text = "No local vaults connected.",
+                        fontSize = 12.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        var vaultToDeleteId by remember { mutableStateOf<String?>(null) }
+                        
+                        vaults.forEach { v ->
+                            val isActive = v.id == activeVault?.id
+                            val isConfirmingDelete = vaultToDeleteId == v.id
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                border = if (isActive) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                                         else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                    else MaterialTheme.colorScheme.surfaceVariant
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val icon = when (v.vaultType) {
+                                                "LOGSEQ" -> Icons.Default.List
+                                                "OBSIDIAN" -> Icons.Default.Lock
+                                                else -> Icons.Default.Edit
+                                            }
+                                            Icon(
+                                                imageVector = icon,
+                                                contentDescription = null,
+                                                tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = v.name,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = v.gitRepo,
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        if (isActive) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(Emerald500.copy(alpha = 0.15f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Active",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Emerald500
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    if (isConfirmingDelete) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Confirm delete? Cached files will be erased.",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Row {
+                                                TextButton(
+                                                    onClick = { vaultToDeleteId = null },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Cancel", fontSize = 11.sp)
+                                                }
+                                                Button(
+                                                    onClick = {
+                                                        onVaultDelete(v)
+                                                        vaultToDeleteId = null
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Confirm", fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (!isActive) {
+                                                Button(
+                                                    onClick = { onVaultSelect(v) },
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                                ) {
+                                                    Text("Switch Workspace", fontSize = 11.sp)
+                                                }
+                                            } else {
+                                                Spacer(modifier = Modifier.width(1.dp))
+                                            }
+
+                                            IconButton(
+                                                onClick = { vaultToDeleteId = v.id },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete Workspace",
+                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Theme Selection Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = "Color Themes".uppercase(),
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     letterSpacing = 1.sp
@@ -2071,18 +1911,24 @@ fun GitCredentialsDialog(
                         FilterChip(
                             selected = isSelected,
                             onClick = { onSelectTheme(themeKey) },
-                            label = { Text(themeLabel, fontSize = 10.sp) },
+                            label = { Text(themeLabel, fontSize = 11.sp) },
                             shape = RoundedCornerShape(8.dp)
                         )
                     }
                 }
+            }
+        }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-
-                // GitHub Credentials Section
+        // GitHub Credentials Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     text = "GitHub Authentication".uppercase(),
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     letterSpacing = 1.sp
@@ -2124,11 +1970,10 @@ fun GitCredentialsDialog(
                         if (isChecking) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.5.dp)
                         } else {
-                            Text("Check Connection", fontSize = 11.sp)
+                            Text("Check Connection", fontSize = 12.sp)
                         }
                     }
 
-                    // Connection status badge
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -2143,7 +1988,7 @@ fun GitCredentialsDialog(
                     ) {
                         Text(
                             text = connectionStatus.uppercase(),
-                            fontSize = 9.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = when (connectionStatus) {
                                 "Active & Valid" -> Emerald500
@@ -2153,59 +1998,67 @@ fun GitCredentialsDialog(
                         )
                     }
                 }
+            }
+        }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-
-                // Settings Switch Section
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Automatic Background Sync",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Auto-sync vaults periodically on connection",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = isBackgroundSyncEnabled,
-                        onCheckedChange = onToggleBackgroundSync
+        // Automatic Background Sync Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Automatic Background Sync",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Auto-sync vaults periodically on connection",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Switch(
+                    checked = isBackgroundSyncEnabled,
+                    onCheckedChange = onToggleBackgroundSync
+                )
             }
-        },
-        confirmButton = {
+        }
+
+        // Save & Reset Action Section
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (currentToken.isNotEmpty()) {
+                TextButton(
+                    onClick = onClear,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Remove GitHub Auth", fontSize = 13.sp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+            }
             Button(
                 onClick = { onConfirm(user, token) },
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Save Changes")
-            }
-        },
-        dismissButton = {
-            Row {
-                if (currentToken.isNotEmpty()) {
-                    TextButton(
-                        onClick = onClear,
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Remove Auth")
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("Close")
-                }
+                Text("Save Changes", fontSize = 13.sp)
             }
         }
-    )
+    }
 }
 
 // --- Add Vault Dialog ---
@@ -2391,284 +2244,6 @@ fun AddNoteDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
-            }
-        }
-    )
-}
-
-// --- Vault & Repository Manager Dialog ---
-
-@Composable
-fun VaultManagerDialog(
-    vaults: List<Vault>,
-    activeVault: Vault?,
-    onDismiss: () -> Unit,
-    onSelect: (Vault) -> Unit,
-    onDelete: (Vault) -> Unit,
-    onAddNewVaultSpace: () -> Unit
-) {
-    var vaultToDeleteId by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "Vault Workspace Manager",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Add, list, and switch between local Git vaults",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-            ) {
-                if (vaults.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "No local note vaults connected.",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(vaults) { v ->
-                            val isActive = v.id == activeVault?.id
-                            val isConfirmingDelete = vaultToDeleteId == v.id
-
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                ),
-                                border = if (isActive) androidx.compose.foundation.BorderStroke(
-                                    width = 1.5.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                ) else androidx.compose.foundation.BorderStroke(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        // Left brand indicator
-                                        Box(
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(
-                                                    if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                                    else MaterialTheme.colorScheme.surfaceVariant
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            val icon = when (v.vaultType) {
-                                                "LOGSEQ" -> Icons.Default.List
-                                                "OBSIDIAN" -> Icons.Default.Lock
-                                                else -> Icons.Default.Edit
-                                            }
-                                            Icon(
-                                                imageVector = icon,
-                                                contentDescription = null,
-                                                tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-
-                                        Spacer(modifier = Modifier.width(12.dp))
-
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = v.name,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = "git: " + v.gitRepo + " (" + v.branch + ")",
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-
-                                        if (isActive) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .background(Emerald500.copy(alpha = 0.15f))
-                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                                            ) {
-                                                Text(
-                                                    text = "Active",
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Emerald500
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(10.dp))
-
-                                    // Tags for Vault Format Type
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        val typeDescription = when(v.vaultType) {
-                                            "OBSIDIAN" -> "Obsidian Subfolders"
-                                            "LOGSEQ" -> "Logseq Structure"
-                                            else -> "Flat Book Structure"
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = typeDescription,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(12.dp))
-
-                                    if (isConfirmingDelete) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "Confirm delete? Cached files will be erased.",
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Row {
-                                                TextButton(
-                                                    onClick = { vaultToDeleteId = null }
-                                                ) {
-                                                    Text("Cancel", fontSize = 11.sp)
-                                                }
-                                                Button(
-                                                    onClick = {
-                                                        onDelete(v)
-                                                        vaultToDeleteId = null
-                                                    },
-                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                                    shape = RoundedCornerShape(6.dp),
-                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                                ) {
-                                                    Text("Confirm Delete", fontSize = 11.sp)
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            // Switch Workspace Button
-                                            if (!isActive) {
-                                                Button(
-                                                    onClick = { onSelect(v) },
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                                                ) {
-                                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("Switch Workspace", fontSize = 12.sp)
-                                                }
-                                            } else {
-                                                Spacer(modifier = Modifier.width(1.dp))
-                                            }
-
-                                            // Delete icon trigger
-                                            IconButton(
-                                                onClick = { vaultToDeleteId = v.id }
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "Delete Space",
-                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onAddNewVaultSpace,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Connect New Vault")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
             }
         }
     )
