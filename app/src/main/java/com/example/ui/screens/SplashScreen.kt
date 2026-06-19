@@ -18,7 +18,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import kotlinx.coroutines.delay
+
 
 @Composable
 fun SplashScreen(
@@ -95,25 +98,21 @@ fun SplashScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(120.dp)
+                .size(130.dp)
                 .scale(scale.value)
                 .alpha(alpha.value)
                 .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
-                        )
-                    ),
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
                     shape = RoundedCornerShape(28.dp)
-                ),
+                )
+                .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.Lock,
+                painter = painterResource(id = R.drawable.app_logo),
                 contentDescription = "App Logo",
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(60.dp)
+                tint = androidx.compose.ui.graphics.Color.Unspecified,
+                modifier = Modifier.fillMaxSize()
             )
         }
 
