@@ -137,8 +137,10 @@ class GitSyncEngine(
                 }
 
                 val remoteTree = treeResponse.body()?.tree ?: emptyList()
+                val isTruncated = treeResponse.body()?.truncated ?: false
                 val remoteFilesMap = remoteTree.filter { it.type == "blob" && (it.path.endsWith(".md") || it.path.endsWith(".txt")) }
                     .associateBy { it.path }
+                val isRemoteTreeEmpty = remoteFilesMap.isEmpty()
 
                 // 2. Fetch existing local notes
                 val localNotes = noteDao.getNotesForVault(vaultId)
@@ -251,31 +253,40 @@ class GitSyncEngine(
                     val remoteEntryStatus = remoteFilesMap[localNote.filePath]
 
                     if (remoteEntryStatus == null) {
-                        if (localNote.syncStatus == "LOCAL_ONLY" || localNote.remoteSha.isEmpty()) {
-                            if (localNote.syncStatus == "TRASHED") {
-                                val timeInTrash = System.currentTimeMillis() - localNote.updatedAt
+                        // Safety protection: If the remote tree is completely empty, it means the repository is empty
+                        // or newly configured. To prevent data loss, treat previously SYNCED notes as LOCAL_ONLY so they
+                        // populate the repository instead of getting deleted.
+                        val adjustedNote = if (isRemoteTreeEmpty && localNote.syncStatus == "SYNCED") {
+                            localNote.copy(syncStatus = "LOCAL_ONLY", remoteSha = "")
+                        } else {
+                            localNote
+                        }
+
+                        if (adjustedNote.syncStatus == "LOCAL_ONLY" || adjustedNote.remoteSha.isEmpty()) {
+                            if (adjustedNote.syncStatus == "TRASHED") {
+                                val timeInTrash = System.currentTimeMillis() - adjustedNote.updatedAt
                                 val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
                                 if (timeInTrash >= thirtyDaysMs) {
-                                    Log.d(TAG, "Purging local-only trashed note: ${localNote.filePath}")
-                                    noteDao.deleteNote(localNote)
-                                    deleteLocalFile(vault, localNote.filePath)
-                                    deleteLocalFile(vault, ".trash/${localNote.filePath}")
+                                    Log.d(TAG, "Purging local-only trashed note: ${adjustedNote.filePath}")
+                                    noteDao.deleteNote(adjustedNote)
+                                    deleteLocalFile(vault, adjustedNote.filePath)
+                                    deleteLocalFile(vault, ".trash/${adjustedNote.filePath}")
                                 }
                             } else {
                                 // LOCAL ONLY: Push create!
-                                Log.d(TAG, "Uploading new local file: ${localNote.filePath}")
-                                val base64Content = Base64.encodeToString(localNote.content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                                Log.d(TAG, "Uploading new local file: ${adjustedNote.filePath}")
+                                val base64Content = Base64.encodeToString(adjustedNote.content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
                                 val updateRequest = UpdateFileRequest(
-                                    message = "Sync create: ${localNote.title}",
+                                    message = "Sync create: ${adjustedNote.title}",
                                     content = base64Content,
                                     sha = null,
                                     branch = vault.branch
                                 )
-                                val updateResponse = gitHubApi.createOrUpdateFile(authHeader, owner, repo, localNote.filePath, updateRequest)
+                                val updateResponse = gitHubApi.createOrUpdateFile(authHeader, owner, repo, adjustedNote.filePath, updateRequest)
                                 if (updateResponse.isSuccessful && updateResponse.body() != null) {
                                     val responseBody = updateResponse.body()!!
                                     val newSha = responseBody.content?.sha ?: ""
-                                    val syncedNote = localNote.copy(
+                                    val syncedNote = adjustedNote.copy(
                                         localSha = newSha,
                                         remoteSha = newSha,
                                         syncStatus = "SYNCED",
@@ -285,12 +296,41 @@ class GitSyncEngine(
                                     pushCount++
                                 }
                             }
-                        } else if (localNote.syncStatus == "DELETED" || localNote.syncStatus == "TRASHED") {
+                        } else if (adjustedNote.syncStatus == "DELETED" || adjustedNote.syncStatus == "TRASHED") {
                             // If it's deleted/trashed locally but already missing on GitHub, we can just purge it from our local database!
-                            Log.d(TAG, "Purging note missing from remote: ${localNote.filePath}")
-                            noteDao.deleteNote(localNote)
-                            deleteLocalFile(vault, localNote.filePath)
-                            deleteLocalFile(vault, ".trash/${localNote.filePath}")
+                            Log.d(TAG, "Purging note missing from remote: ${adjustedNote.filePath}")
+                            noteDao.deleteNote(adjustedNote)
+                            deleteLocalFile(vault, adjustedNote.filePath)
+                            deleteLocalFile(vault, ".trash/${adjustedNote.filePath}")
+                        } else {
+                            // Previously synced in GitHub but deleted from GitHub remote. Discard locally or mark conflict?
+                            // Skip if the remote tree fetch was truncated (safety net).
+                            // Skip if the note was updated/synced recently (less than 5 mins ago) to protect against replication lag.
+                            val timeSinceUpdate = System.currentTimeMillis() - adjustedNote.updatedAt
+                            val isRecent = timeSinceUpdate < 5L * 60 * 1000 // 5 minutes
+                            
+                            if (isTruncated) {
+                                Log.w(TAG, "Remote tree was truncated; skipping local deletion for safety: ${adjustedNote.filePath}")
+                            } else if (isRecent) {
+                                Log.d(TAG, "Recent note missing from remote tree (likely replication lag); skipping local deletion: ${adjustedNote.filePath}")
+                            } else if (adjustedNote.syncStatus == "MODIFIED") {
+                                Log.w(TAG, "File was deleted on remote but edited locally: ${adjustedNote.filePath}")
+                                val conflictNote = adjustedNote.copy(
+                                    syncStatus = "CONFLICT",
+                                    remoteSha = ""
+                                )
+                                noteDao.insertNote(conflictNote)
+                                conflictCount++
+                            } else {
+                                Log.d(TAG, "File deleted from remote, moving to local trash: ${adjustedNote.filePath}")
+                                moveFileToTrashDisk(vault, adjustedNote.filePath)
+                                val trashedNote = adjustedNote.copy(
+                                    syncStatus = "TRASHED",
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                                noteDao.insertNote(trashedNote)
+                                pullCount++
+                            }
                         }
                     } else if (localNote.syncStatus == "DELETED") {
                         // DELETED LOCALLY: Sync DELETE to remote
@@ -325,23 +365,6 @@ class GitSyncEngine(
                                 deleteLocalFile(vault, ".trash/${localNote.filePath}")
                                 pushCount++
                             }
-                        }
-                    } else {
-                        // Previously synced in GitHub but deleted from GitHub remote. Discard locally or mark conflict?
-                        // Standard behavior: Delete locally to keep in-sync, but let's back up to a conflict state if modified.
-                        if (localNote.syncStatus == "MODIFIED") {
-                            Log.w(TAG, "File was deleted on remote but edited locally: ${localNote.filePath}")
-                            val conflictNote = localNote.copy(
-                                syncStatus = "CONFLICT",
-                                remoteSha = ""
-                            )
-                            noteDao.insertNote(conflictNote)
-                            conflictCount++
-                        } else {
-                            Log.d(TAG, "File deleted from remote, purging locally: ${localNote.filePath}")
-                            noteDao.deleteNote(localNote)
-                            deleteLocalFile(vault, localNote.filePath)
-                            pullCount++
                         }
                     }
                 }
@@ -469,6 +492,25 @@ class GitSyncEngine(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed deleting physical file", e)
+        }
+    }
+
+    private fun moveFileToTrashDisk(vault: Vault, filePath: String) {
+        try {
+            val vaultDir = getVaultDirectory(vault)
+            val sourceFile = File(vaultDir, filePath)
+            if (sourceFile.exists()) {
+                val trashFile = File(vaultDir, ".trash/$filePath")
+                trashFile.parentFile?.mkdirs()
+                sourceFile.renameTo(trashFile)
+                if (!trashFile.exists()) {
+                    sourceFile.copyTo(trashFile, overwrite = true)
+                    sourceFile.delete()
+                }
+                Log.d(TAG, "Moved file to trash: ${trashFile.absolutePath}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to move file to trash", e)
         }
     }
 }
