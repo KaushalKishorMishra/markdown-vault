@@ -298,20 +298,20 @@ fun DashboardScreen(
                                     )
                                 } else if (selectedNote != null) {
                                     Text(
-                                        text = selectedNote!!.title,
+                                        text = selectedNote?.title ?: "",
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    val statusText = when (selectedNote!!.syncStatus) {
+                                    val statusText = when (selectedNote?.syncStatus) {
                                         "SYNCED" -> "Synced"
                                         "MODIFIED" -> "Modified locally"
                                         "LOCAL_ONLY" -> "Local only"
-                                        else -> selectedNote!!.syncStatus
+                                        else -> selectedNote?.syncStatus ?: ""
                                     }
                                     Text(
-                                        text = "$statusText • ${selectedNote!!.filePath}",
+                                        text = "$statusText • ${selectedNote?.filePath ?: ""}",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         maxLines = 1,
@@ -325,7 +325,7 @@ fun DashboardScreen(
                                     )
                                     if (activeVault != null) {
                                         Text(
-                                            text = activeVault!!.gitRepo,
+                                            text = activeVault?.gitRepo ?: "",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                             maxLines = 1,
@@ -592,20 +592,31 @@ fun DashboardScreen(
                                 )
                             }
                             DashboardScreenType.EXPLORER -> {
-                                FolderExplorer(
-                                    activeVault = activeVault!!,
-                                    notes = notes,
-                                    currentPath = currentBrowsingPath,
-                                    onPathChange = { currentBrowsingPath = it },
-                                    onNoteSelect = { viewModel.selectNote(it) },
-                                    onAddNoteClick = { showAddNoteDialog = true },
-                                    onDeleteFolder = { viewModel.deleteFolder(it) },
-                                    onRenameFolder = { old, new -> viewModel.renameFolder(old, new) },
-                                    onRenameNote = { note, title, name -> viewModel.renameNote(note, title, name) },
-                                    onDeleteNote = { viewModel.deleteNote(it) },
-                                    searchQuery = searchQuery,
-                                    onSearchChange = { viewModel.setSearchQuery(it) }
-                                )
+                                val vault = activeVault
+                                if (vault == null) {
+                                    EmptyWorkspaceArea(
+                                        activeVault = null,
+                                        notesCount = 0,
+                                        onAddNoteClick = { showAddNoteDialog = true },
+                                        onGitConfigClick = { showSettingsScreen = true },
+                                        isGitConfigured = isGitConfigured
+                                    )
+                                } else {
+                                    FolderExplorer(
+                                        activeVault = vault,
+                                        notes = notes,
+                                        currentPath = currentBrowsingPath,
+                                        onPathChange = { currentBrowsingPath = it },
+                                        onNoteSelect = { viewModel.selectNote(it) },
+                                        onAddNoteClick = { showAddNoteDialog = true },
+                                        onDeleteFolder = { viewModel.deleteFolder(it) },
+                                        onRenameFolder = { old, new -> viewModel.renameFolder(old, new) },
+                                        onRenameNote = { note, title, name -> viewModel.renameNote(note, title, name) },
+                                        onDeleteNote = { viewModel.deleteNote(it) },
+                                        searchQuery = searchQuery,
+                                        onSearchChange = { viewModel.setSearchQuery(it) }
+                                    )
+                                }
                             }
                             DashboardScreenType.EMPTY -> {
                                 EmptyWorkspaceArea(
@@ -617,8 +628,10 @@ fun DashboardScreen(
                                 )
                             }
                             DashboardScreenType.WORKSPACE -> {
-                                NoteWorkspace(
-                                    note = selectedNote!!,
+                                val note = selectedNote
+                                if (note != null) {
+                                    NoteWorkspace(
+                                        note = note,
                                     isEditMode = isEditMode,
                                     isTabletLayout = isTablet,
                                     syncState = syncState,
@@ -629,6 +642,7 @@ fun DashboardScreen(
                                         viewModel.resolveMergeConflict(resolution, mergedText)
                                     }
                                 )
+                            }
                             }
                         }
                     }
@@ -711,7 +725,7 @@ fun DashboardScreen(
                     )
                     if (activeVault != null) {
                         Text(
-                            text = "Repository: ${activeVault!!.gitRepo}\nBranch: ${activeVault!!.branch}",
+                            text = "Repository: ${activeVault?.gitRepo ?: ""}\nBranch: ${activeVault?.branch ?: ""}",
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
