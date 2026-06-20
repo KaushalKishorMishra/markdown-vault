@@ -1135,8 +1135,7 @@ fun NoteWorkspace(
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(if (!isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .clickable { onEditModeChange(false) }
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                                .minimumTouchTarget()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .semantics {
                                     role = Role.Tab
                                     selected = !isEditMode
@@ -1166,8 +1165,7 @@ fun NoteWorkspace(
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(if (isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .clickable { onEditModeChange(true) }
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                                .minimumTouchTarget()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .semantics {
                                     role = Role.Tab
                                     selected = isEditMode
@@ -2801,7 +2799,6 @@ fun FolderExplorer(
                         color = if (currentPath.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .clickable { onPathChange("") }
-                            .minimumTouchTarget()
                             .padding(vertical = 4.dp, horizontal = 6.dp)
                             .semantics {
                                 role = Role.Button
@@ -2828,7 +2825,6 @@ fun FolderExplorer(
                                 color = if (isLast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .clickable { onPathChange(targetPath) }
-                                    .minimumTouchTarget()
                                     .padding(vertical = 4.dp, horizontal = 6.dp)
                                     .semantics {
                                         role = Role.Button
