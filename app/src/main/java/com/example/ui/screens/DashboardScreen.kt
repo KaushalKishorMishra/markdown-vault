@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,6 +13,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -32,11 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalAccessibilityManager
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
@@ -204,6 +215,7 @@ fun DashboardScreen(
     var showSyncConfirmationDialog by remember { mutableStateOf(false) }
     var showSearchPanel by remember { mutableStateOf(false) }
     var showDeleteNoteDialog by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
 
     // Screen reader announcements for sync state changes
     val syncAnnouncement = remember(syncState) {
@@ -516,6 +528,9 @@ fun DashboardScreen(
                 ) {
                     // Search Panel (appears below top bar when activated)
                     if (showSearchPanel && selectedNote == null) {
+                        LaunchedEffect(showSearchPanel) {
+                            searchFocusRequester.requestFocus()
+                        }
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { viewModel.setSearchQuery(it) },
@@ -550,6 +565,7 @@ fun DashboardScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 12.dp, top = 8.dp)
+                                .focusRequester(searchFocusRequester)
                                 .semantics { role = Role.Button }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
@@ -571,14 +587,18 @@ fun DashboardScreen(
                     AnimatedContent(
                         targetState = currentScreenType,
                         transitionSpec = {
+                            val springSpec = spring<IntOffset>(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow
+                            )
                             if (initialState == DashboardScreenType.EMPTY && targetState == DashboardScreenType.EXPLORER) {
-                                fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
+                                fadeIn(animationSpec = tween(250)) togetherWith fadeOut(animationSpec = tween(150))
                             } else if (targetState == DashboardScreenType.WORKSPACE || targetState == DashboardScreenType.SETTINGS) {
-                                (slideInHorizontally(animationSpec = tween(400)) { width -> width } + fadeIn(animationSpec = tween(400))) togetherWith
-                                        (slideOutHorizontally(animationSpec = tween(400)) { width -> -width } + fadeOut(animationSpec = tween(400)))
+                                (slideInHorizontally(animationSpec = springSpec) { width -> width } + fadeIn(animationSpec = tween(220))) togetherWith
+                                        (slideOutHorizontally(animationSpec = tween(180)) { width -> -width } + fadeOut(animationSpec = tween(180)))
                             } else {
-                                (slideInHorizontally(animationSpec = tween(400)) { width -> -width } + fadeIn(animationSpec = tween(400))) togetherWith
-                                        (slideOutHorizontally(animationSpec = tween(400)) { width -> width } + fadeOut(animationSpec = tween(400)))
+                                (slideInHorizontally(animationSpec = springSpec) { width -> -width } + fadeIn(animationSpec = tween(220))) togetherWith
+                                        (slideOutHorizontally(animationSpec = tween(180)) { width -> width } + fadeOut(animationSpec = tween(180)))
                             }
                         },
                         label = "screen_transition",
@@ -1301,6 +1321,38 @@ fun NoteWorkspace(
                             isHighContrast = selectedTheme.startsWith("HIGH_CONTRAST")
                         )
                     }
+                }
+            }
+            
+            if (isEditMode) {
+                val wordCount = remember(note.content) {
+                    val trimmed = note.content.trim()
+                    if (trimmed.isEmpty()) 0 else trimmed.split(Regex("\\s+")).size
+                }
+                val charCount = note.content.length
+                val readingTime = (wordCount / 200).coerceAtLeast(1)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "$wordCount words",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = "$charCount chars",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = "~${readingTime}min read",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
                 }
             }
         }
@@ -2738,6 +2790,36 @@ fun AddNoteDialog(
 }
 
 @Composable
+private fun rememberHighlightedText(text: String, query: String): AnnotatedString {
+    if (query.isBlank()) return AnnotatedString(text)
+    val lowerText = text.lowercase()
+    val lowerQuery = query.lowercase()
+    val primary = MaterialTheme.colorScheme.primary
+    val bg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    return remember(text, query) {
+        var startIndex = 0
+        buildAnnotatedString {
+            while (true) {
+                val matchIndex = lowerText.indexOf(lowerQuery, startIndex)
+                if (matchIndex == -1) {
+                    append(text.substring(startIndex))
+                    break
+                }
+                append(text.substring(startIndex, matchIndex))
+                withStyle(SpanStyle(
+                    color = primary,
+                    fontWeight = FontWeight.Bold,
+                    background = bg
+                )) {
+                    append(text.substring(matchIndex, matchIndex + query.length))
+                }
+                startIndex = matchIndex + query.length
+            }
+        }
+    }
+}
+
+@Composable
 fun FolderExplorer(
     activeVault: Vault,
     notes: List<Note>,
@@ -2900,19 +2982,53 @@ fun FolderExplorer(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = if (searchQuery.isNotEmpty()) "No files match your query" else "This folder is empty",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    if (searchQuery.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Default.SearchOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No results found",
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Try different keywords or clear the search",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedButton(onClick = { onSearchChange("") }) {
+                            Text("Clear Search")
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "This folder is empty",
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (currentPath.isEmpty()) "Create a new note to get started" else "Move or create notes in this folder",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         } else {
@@ -3149,8 +3265,13 @@ fun FolderExplorer(
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(10.dp))
+                                val highlightedTitle = if (searchQuery.isNotEmpty()) {
+                                    rememberHighlightedText(file.title, searchQuery)
+                                } else {
+                                    AnnotatedString(file.title)
+                                }
                                 Text(
-                                    text = file.title,
+                                    text = highlightedTitle,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface,
