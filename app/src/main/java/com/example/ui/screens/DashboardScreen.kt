@@ -200,9 +200,10 @@ fun DashboardScreen(
     var showAddVaultDialog by remember { mutableStateOf(false) }
     var showAddNoteDialog by remember { mutableStateOf(false) }
     var showSettingsScreen by remember { mutableStateOf(false) }
-    var showVaultSettingsMenu by remember { mutableStateOf(false) }
     var showAddFolderDialog by remember { mutableStateOf(false) }
     var showSyncConfirmationDialog by remember { mutableStateOf(false) }
+    var showSearchPanel by remember { mutableStateOf(false) }
+    var showDeleteNoteDialog by remember { mutableStateOf(false) }
 
     // Screen reader announcements for sync state changes
     val syncAnnouncement = remember(syncState) {
@@ -220,7 +221,7 @@ fun DashboardScreen(
     // Main scaffold
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = true,
+        gesturesEnabled = selectedNote == null,
         drawerContent = {
             if (!isTablet) {
                 ModalDrawerSheet(
@@ -365,7 +366,7 @@ fun DashboardScreen(
                             } else if (selectedNote != null) {
                                 // Delete Note
                                 IconButton(
-                                    onClick = { viewModel.deleteSelectedNote() },
+                                    onClick = { showDeleteNoteDialog = true },
                                     modifier = Modifier.minimumTouchTarget()
                                 ) {
                                     Icon(
@@ -375,48 +376,40 @@ fun DashboardScreen(
                                     )
                                 }
                             } else if (activeVault != null) {
-                                // Sync indicator and trigger button (with confirmation dialog)
-                                when (syncState) {
-                                    is SyncState.Syncing -> {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                    }
-                                    else -> {
-                                        IconButton(
-                                            onClick = { showSyncConfirmationDialog = true },
-                                            modifier = Modifier.minimumTouchTarget()
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Refresh,
-                                                contentDescription = if (isGitConfigured) "Sync Vault with GitHub" else "Configure GitHub to enable sync",
-                                                tint = if (isGitConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
+                                // Search icon
+                                IconButton(
+                                    onClick = { showSearchPanel = !showSearchPanel },
+                                    modifier = Modifier.minimumTouchTarget()
+                                ) {
+                                    Icon(
+                                        imageVector = if (showSearchPanel) Icons.Default.Close else Icons.Default.Search,
+                                        contentDescription = if (showSearchPanel) "Close search" else "Search files",
+                                        tint = MaterialTheme.colorScheme.onSurface
+                                    )
                                 }
-                                Box {
-                                    IconButton(
-                                        onClick = { showVaultSettingsMenu = true },
-                                        modifier = Modifier.minimumTouchTarget()
-                                    ) {
-                                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Vault Options")
-                                    }
-                                    DropdownMenu(
-                                        expanded = showVaultSettingsMenu,
-                                        onDismissRequest = { showVaultSettingsMenu = false }
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Delete This Vault") },
-                                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                            onClick = {
-                                                activeVault?.let { viewModel.deleteVault(it) }
-                                                showVaultSettingsMenu = false
+                                if (!showSearchPanel) {
+                                    // Sync indicator and trigger button (with confirmation dialog)
+                                    when (syncState) {
+                                        is SyncState.Syncing -> {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
+                                        else -> {
+                                            IconButton(
+                                                onClick = { showSyncConfirmationDialog = true },
+                                                modifier = Modifier.minimumTouchTarget()
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Refresh,
+                                                    contentDescription = if (isGitConfigured) "Sync Vault with GitHub" else "Configure GitHub to enable sync",
+                                                    tint = if (isGitConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
                                             }
-                                        )
+                                        }
                                     }
                                 }
                             }
@@ -514,13 +507,59 @@ fun DashboardScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-            ) { innerPadding ->
-                LiveRegion(text = syncAnnouncement)
-                Box(
+                ) { innerPadding ->
+                    LiveRegion(text = syncAnnouncement)
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
+                    // Search Panel (appears below top bar when activated)
+                    if (showSearchPanel && selectedNote == null) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            label = { Text("Search files and folders") },
+                            placeholder = { Text("Search files and folders...") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowBack,
+                                    contentDescription = "Close search",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.clickable { showSearchPanel = false; viewModel.setSearchQuery("") }
+                                )
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { viewModel.setSearchQuery("") },
+                                        modifier = Modifier.minimumTouchTarget()
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp, top = 8.dp)
+                                .semantics { role = Role.Button }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
                     val currentScreenType = when {
                         showSettingsScreen -> DashboardScreenType.SETTINGS
                         selectedNote == null -> {
@@ -645,11 +684,12 @@ fun DashboardScreen(
                             }
                             }
                         }
-                    }
-                }
-            }
-        }
-    }
+                    }   // AnimatedContent
+                    }   // Box
+                }   // Column
+            }   // Scaffold
+        }   // Row
+    }   // ModalNavigationDrawer
 
     // --- Dialogs & Overlays ---
 
@@ -751,6 +791,30 @@ fun DashboardScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showSyncConfirmationDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDeleteNoteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteNoteDialog = false },
+            title = { Text("Delete Note?") },
+            text = { Text("This will move the note to trash. You can restore it from the Recently Deleted section.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteSelectedNote()
+                        showDeleteNoteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteNoteDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -2727,38 +2791,7 @@ fun FolderExplorer(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // 1. Google Files Style Search Bar (Pill shape)
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchChange,
-            label = { Text("Search files and folders") },
-            placeholder = { Text("Search files and folders...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(
-                        onClick = { onSearchChange("") },
-                        modifier = Modifier.minimumTouchTarget()
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear search")
-                    }
-                }
-            },
-            shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-                .semantics { role = Role.Button }
-        )
-
-        // 2. Navigation Header / Breadcrumbs (Only show if not searching)
+        // Navigation Header / Breadcrumbs (Only show if not searching)
         if (searchQuery.isEmpty()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
