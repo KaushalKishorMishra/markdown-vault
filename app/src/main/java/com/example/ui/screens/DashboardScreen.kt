@@ -220,7 +220,7 @@ fun DashboardScreen(
     // Main scaffold
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = false,
+        gesturesEnabled = true,
         drawerContent = {
             if (!isTablet) {
                 ModalDrawerSheet(
