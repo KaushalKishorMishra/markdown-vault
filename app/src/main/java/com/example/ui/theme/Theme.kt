@@ -119,6 +119,24 @@ private val HighContrastDarkColorScheme = darkColorScheme(
     onError = HighContrastDarkOnError
 )
 
+private val GlassColorScheme = lightColorScheme(
+    primary = GlassPrimary,
+    onPrimary = GlassOnPrimary,
+    primaryContainer = GlassPrimaryContainer,
+    onPrimaryContainer = GlassOnPrimaryContainer,
+    secondary = GlassSecondary,
+    onSecondary = GlassOnSecondary,
+    background = GlassBg,
+    onBackground = GlassText,
+    surface = GlassSurface,
+    onSurface = GlassText,
+    surfaceVariant = GlassSurfaceVariant,
+    onSurfaceVariant = GlassTextSecondary,
+    outline = GlassOutline,
+    error = GlassError,
+    onError = GlassOnError
+)
+
 private val HighContrastLightColorScheme = lightColorScheme(
     primary = HighContrastLightPrimary,
     onPrimary = HighContrastLightOnPrimary,
@@ -143,10 +161,16 @@ fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    val context = LocalContext.current
     val colorScheme = when (themeName) {
         "CYBERPUNK" -> CyberpunkColorScheme
         "EMERALD" -> EmeraldColorScheme
         "CLASSIC" -> ClassicColorScheme
+        "GLASS" -> if (Build.VERSION.SDK_INT >= 31) {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        } else {
+            GlassColorScheme
+        }
         "LIGHT" -> LightColorScheme
         "HIGH_CONTRAST_DARK" -> HighContrastDarkColorScheme
         "HIGH_CONTRAST_LIGHT" -> HighContrastLightColorScheme

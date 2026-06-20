@@ -410,10 +410,11 @@ ${'$'}${'$'}\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}${'$'}${'$'}"""
 
     // --- Vault Management Commands ---
 
-    fun createVault(name: String, repository: String, branch: String, layoutType: String) {
+    fun createVault(name: String, repository: String, branch: String, layoutType: String = "OBSIDIAN") {
         viewModelScope.launch {
             val uuid = UUID.randomUUID().toString()
-            val cleanRepo = repository.trim().removePrefix("https://github.com/").removeSuffix(".git")
+            val username = gitUsername.value.ifEmpty { "user" }
+            val cleanRepo = "$username/${repository.trim().removePrefix("https://github.com/").removeSuffix(".git").removePrefix("$username/")}"
             val newVault = Vault(
                 id = uuid,
                 name = name,

@@ -721,8 +721,8 @@ fun DashboardScreen(
     if (showAddVaultDialog) {
         AddVaultDialog(
             onDismiss = { showAddVaultDialog = false },
-            onConfirm = { name, repo, branch, style ->
-                viewModel.createVault(name, repo, branch, style)
+            onConfirm = { name, repo, branch ->
+                viewModel.createVault(name, repo, branch)
                 showAddVaultDialog = false
             }
         )
@@ -2397,6 +2397,7 @@ fun SettingsScreen(
                         "CYBERPUNK" to "Neon Cyber",
                         "EMERALD" to "Sage Forest",
                         "CLASSIC" to "Warm Amber",
+                        "GLASS" to "Frosted Glass",
                         "LIGHT" to "Lavender Light",
                         "HIGH_CONTRAST_DARK" to "High Contrast Dark",
                         "HIGH_CONTRAST_LIGHT" to "High Contrast Light"
@@ -2560,13 +2561,11 @@ fun SettingsScreen(
 @Composable
 fun AddVaultDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String) -> Unit
+    onConfirm: (String, String, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var repo by remember { mutableStateOf("") }
     var branch by remember { mutableStateOf("main") }
-    var style by remember { mutableStateOf("OBSIDIAN") } // "OBSIDIAN", "LOGSEQ", "BASIC"
-    var expandedStyleMenu by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2579,73 +2578,33 @@ fun AddVaultDialog(
                     label = { Text("Workspace Name") },
                     placeholder = { Text("e.g. Personal Notes") },
                     shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = repo,
                     onValueChange = { repo = it },
-                    label = { Text("GitHub Repo (owner/repo)") },
-                    placeholder = { Text("e.g. kaushalkmishra/notes-vault") },
+                    label = { Text("Repository Name") },
+                    placeholder = { Text("e.g. notes-vault") },
+                    supportingText = { Text("Uses your GitHub username from credentials", fontSize = 10.sp) },
                     shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary),
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = branch,
                     onValueChange = { branch = it },
-                    label = { Text("Default Sync Branch (defaults: main)") },
+                    label = { Text("Default Sync Branch") },
+                    placeholder = { Text("main") },
                     shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary),
+                    singleLine = true
                 )
-
-                // Structure Selection Expose
-                Box {
-                    ExposedDropdownMenuBox(
-                        expanded = expandedStyleMenu,
-                        onExpandedChange = { expandedStyleMenu = !expandedStyleMenu }
-                    ) {
-                        OutlinedTextField(
-                            value = style,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Subfolder Structured Layout") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedStyleMenu) },
-                            modifier = Modifier.menuAnchor(),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expandedStyleMenu,
-                            onDismissRequest = { expandedStyleMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Obsidian-style (Nested Standard Folder)") },
-                                onClick = {
-                                    style = "OBSIDIAN"
-                                    expandedStyleMenu = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Logseq-style (/pages & /journals folders)") },
-                                onClick = {
-                                    style = "LOGSEQ"
-                                    expandedStyleMenu = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Flat Basic List (flat folders)") },
-                                onClick = {
-                                    style = "BASIC"
-                                    expandedStyleMenu = false
-                                }
-                            )
-                        }
-                    }
-                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { if (name.isNotEmpty() && repo.isNotEmpty()) onConfirm(name, repo, branch, style) },
+                onClick = { if (name.isNotEmpty() && repo.isNotEmpty()) onConfirm(name, repo.trim(), branch.ifEmpty { "main" }) },
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text("Create Workspace")

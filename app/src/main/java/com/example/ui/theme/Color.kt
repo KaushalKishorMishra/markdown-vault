@@ -66,3 +66,22 @@ val HighContrastLightOnSecondary = Color.White
 val HighContrastLightOutline = Color.Black
 val HighContrastLightError = Color(0xFFD32F2F)
 val HighContrastLightOnError = Color.White
+
+// ========================================================================
+// GLASS / FROSTED THEME COLORS — translucent, light, and airy
+// ========================================================================
+val GlassBg = Color(0xFFE8F0FE)              // Blue-tinted white
+val GlassSurface = Color(0xB3FFFFFF)          // Transparent white (70%)
+val GlassSurfaceVariant = Color(0x80E8F0FE)   // Frosted blue (50%)
+val GlassCardBg = Color(0xCCFFFFFF)           // Frosted glass card (80%)
+val GlassPrimary = Color(0xFF4A90D9)          // Soft blue
+val GlassOnPrimary = Color.White
+val GlassPrimaryContainer = Color(0x4D4A90D9) // Translucent primary
+val GlassOnPrimaryContainer = Color(0xFF4A90D9)
+val GlassSecondary = Color(0xFF7C4DFF)        // Soft purple accent
+val GlassOnSecondary = Color.White
+val GlassText = Color(0xFF1A1A2E)             // Dark navy text
+val GlassTextSecondary = Color(0x993C4042)    // Muted translucent text
+val GlassOutline = Color(0x4DB0BEC5)          // Subtle frosted border
+val GlassError = Color(0xFFE57373)
+val GlassOnError = Color.White
