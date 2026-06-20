@@ -1,6 +1,9 @@
 package com.example.ui.components
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.view.View
+import android.view.accessibility.AccessibilityManager
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -10,13 +13,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MarkdownPreview(
     markdownString: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isHighContrast: Boolean = false
 ) {
     val htmlTemplate = remember {
         """
@@ -45,6 +50,39 @@ fun MarkdownPreview(
                     padding: 20px;
                     line-height: 1.6;
                     font-size: 16px;
+                    /* High contrast styles applied via .high-contrast class */
+                }
+                body.high-contrast {
+                    background-color: #000000 !important;
+                    color: #FFFFFF !important;
+                    line-height: 2;
+                    font-size: 18px;
+                }
+                body.high-contrast a {
+                    color: #00FFFF !important;
+                    text-decoration: underline !important;
+                }
+                body.high-contrast h1, body.high-contrast h2,
+                body.high-contrast h3, body.high-contrast h4,
+                body.high-contrast h5, body.high-contrast h6 {
+                    color: #FFFFFF !important;
+                    border-bottom-color: #FFFFFF !important;
+                }
+                body.high-contrast code {
+                    background-color: #2D2D2D !important;
+                    color: #00FF00 !important;
+                }
+                body.high-contrast pre {
+                    background-color: #0D0D0D !important;
+                    border-color: #FFFFFF !important;
+                }
+                body.high-contrast blockquote {
+                    border-left-color: #00FFFF !important;
+                    color: #FFFFFF !important;
+                }
+                body.high-contrast th, body.high-contrast td {
+                    border-color: #FFFFFF !important;
+                }
                 }
                 h1, h2, h3, h4, h5, h6 {
                     color: #D0BCFF; /* ArtisticPrimary display headers */
@@ -125,13 +163,16 @@ fun MarkdownPreview(
             </style>
         </head>
         <body>
-            <div id="content"></div>
+            <main>
+                <article id="content" role="article" aria-label="Document content"></article>
+            </main>
 
             <script>
                 // Set up marked.js options
                 marked.setOptions({
                     gfm: true,
-                    breaks: true
+                    breaks: true,
+                    headerIds: true
                 });
 
                 // Override mermaid parse error to prevent native Alert/Crash
@@ -163,6 +204,52 @@ fun MarkdownPreview(
                         var contentDiv = document.getElementById('content');
                         contentDiv.innerHTML = renderedHtml;
 
+                        // Accessibility: Add alt text to images without alt attribute
+                        var images = contentDiv.querySelectorAll('img:not([alt])');
+                        images.forEach(function(img) {
+                            var filename = img.src.split('/').pop().split('#')[0].split('?')[0];
+                            img.alt = 'Image: ' + (img.title || filename || 'No description');
+                            img.setAttribute('aria-label', img.alt);
+                        });
+                        // Accessibility: Mark tables with headers
+                        var tables = contentDiv.querySelectorAll('table');
+                        tables.forEach(function(table) {
+                            if (!table.hasAttribute('role')) {
+                                table.setAttribute('role', 'table');
+                            }
+                            var headerRow = table.querySelector('thead tr, tr:first-child');
+                            if (headerRow) {
+                                headerRow.querySelectorAll('th, td').forEach(function(cell, idx) {
+                                    if (cell.tagName !== 'TH') {
+                                        var th = document.createElement('th');
+                                        th.innerHTML = cell.innerHTML;
+                                        th.setAttribute('scope', 'col');
+                                        cell.replaceWith(th);
+                                    } else {
+                                        cell.setAttribute('scope', 'col');
+                                    }
+                                });
+                            }
+                        });
+                        // Accessibility: Add aria-labels to code blocks
+                        var codeBlocks = contentDiv.querySelectorAll('pre code');
+                        codeBlocks.forEach(function(code) {
+                            var pre = code.closest('pre');
+                            if (pre && !pre.getAttribute('aria-label')) {
+                                var lang = Array.from(code.classList)
+                                    .filter(function(c) { return c.startsWith('language-'); })
+                                    .map(function(c) { return c.replace('language-', ''); })[0];
+                                pre.setAttribute('aria-label', 'Code block' + (lang ? ' in ' + lang : ''));
+                            }
+                        });
+                        // Accessibility: Add heading levels as ARIA level
+                        for (var i = 1; i <= 6; i++) {
+                            var headings = contentDiv.querySelectorAll('h' + i);
+                            headings.forEach(function(h) {
+                                h.setAttribute('aria-level', i.toString());
+                            });
+                        }
+
                         // Process LaTeX/Math expressions with KaTeX
                         renderMathInElement(contentDiv, {
                             delimiters: [
@@ -183,6 +270,8 @@ fun MarkdownPreview(
                             mermaidContainer.className = 'mermaid';
                             mermaidContainer.id = 'mermaid-chart-' + idx;
                             mermaidContainer.textContent = codeElement.textContent;
+                            mermaidContainer.setAttribute('aria-label', 'Mermaid diagram: ' + codeElement.textContent.substring(0, 60) + '...');
+                            mermaidContainer.setAttribute('role', 'img');
                             preElement.replaceWith(mermaidContainer);
                         });
 
@@ -194,13 +283,17 @@ fun MarkdownPreview(
                         if (window.mermaidError) {
                             var errors = contentDiv.querySelectorAll('.mermaid[data-processed="false"], .mermaid:empty');
                             errors.forEach(function(errEl) {
-                                errEl.innerHTML = "<div style='color: #F87171; padding: 12px; border: 1px dashed #F87171; border-radius: 6px; font-family: monospace; font-size: 12px;'><b>Mermaid Diagram Error:</b><br>" + window.mermaidError.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</div>";
+                                errEl.innerHTML = "<div style='color: #F87171; padding: 12px; border: 1px dashed #F87171; border-radius: 6px; font-family: monospace; font-size: 12px;' tabindex='0' role='alert'><b>Mermaid Diagram Error:</b><br>" + window.mermaidError.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</div>";
                             });
                         }
 
                     } catch (e) {
-                        document.getElementById('content').innerHTML = "<div style='color: #EF4444; padding: 12px; border: 1px solid #EF4444; border-radius: 6px;'><b>Rendering Error:</b> " + e.message + "</div>";
+                        document.getElementById('content').innerHTML = "<div role='alert' style='color: #FFFFFF; background-color: #D32F2F; padding: 16px; border-radius: 8px; font-weight: bold;'><b>Rendering Error:</b> " + e.message + "</div>";
                     }
+                }
+
+                function setHighContrast(enabled) {
+                    document.body.classList.toggle('high-contrast', enabled);
                 }
             </script>
         </body>
@@ -221,7 +314,11 @@ fun MarkdownPreview(
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     allowFileAccess = true
+                    builtInZoomControls = true
+                    displayZoomControls = false
+                    textZoom = 100
                 }
+                importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
@@ -229,6 +326,9 @@ fun MarkdownPreview(
                         // Escape the markdown for JavaScript insertion
                         val escapedMarkdown = escapeMarkdownForJs(markdownString)
                         evaluateJavascript("javascript:updateMarkdown('$escapedMarkdown')", null)
+                        if (isHighContrast) {
+                            evaluateJavascript("javascript:setHighContrast(true)", null)
+                        }
                     }
                 }
                 webChromeClient = object : WebChromeClient() {
@@ -244,6 +344,9 @@ fun MarkdownPreview(
         update = { webView ->
             val escapedMarkdown = escapeMarkdownForJs(markdownString)
             webView.evaluateJavascript("javascript:updateMarkdown('$escapedMarkdown')", null)
+            if (isHighContrast) {
+                webView.evaluateJavascript("javascript:setHighContrast(true)", null)
+            }
         },
         modifier = modifier.fillMaxSize()
     )

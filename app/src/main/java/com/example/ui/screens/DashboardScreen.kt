@@ -11,6 +11,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -18,6 +30,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyRow
@@ -31,7 +45,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.painterResource
 import com.example.R
@@ -63,6 +76,98 @@ enum class DashboardScreenType {
     WORKSPACE
 }
 
+// Accessibility helpers
+val MinimumTouchTarget = Modifier
+    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+    .wrapContentSize(Alignment.Center)
+
+fun Modifier.minimumTouchTarget(): Modifier = this.then(MinimumTouchTarget)
+
+fun Modifier.menuItemRole(selected: Boolean = false, action: (() -> Unit)? = null): Modifier =
+    this
+        .semantics(mergeDescendants = true) {
+            role = Role.Button
+            if (selected) {
+                this.selected = true
+            }
+            onClick(action = { action?.invoke(); true })
+        }
+        .minimumTouchTarget()
+
+fun Modifier.buttonRole(contentDescription: String, action: (() -> Unit)? = null): Modifier =
+    this
+        .semantics {
+            role = Role.Button
+            this.contentDescription = contentDescription
+            if (action != null) {
+                onClick(action = { action(); true })
+            }
+        }
+        .minimumTouchTarget()
+
+fun Modifier.switchRole(contentDescription: String, checked: Boolean, action: ((Boolean) -> Unit)? = null): Modifier =
+    this
+        .semantics {
+            role = Role.Switch
+            this.contentDescription = contentDescription
+            this.stateDescription = if (checked) "On" else "Off"
+            onClick(action = { action?.invoke(checked); true })
+        }
+        .minimumTouchTarget()
+
+fun Modifier.textFieldRole(label: String): Modifier =
+    this
+        .semantics {
+            role = Role.Button
+            this.contentDescription = label
+        }
+
+fun Modifier.headingRole(level: Int = 1): Modifier =
+    this
+        .semantics {
+            role = Role.Button
+            contentDescription = ""
+        }
+
+// Skip to main content link for keyboard/screen reader users
+@Composable
+fun SkipToMainContent() {
+    var isVisible by remember { mutableStateOf(false) }
+    
+    Text(
+        text = "Skip to main content",
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary)
+            .padding(16.dp)
+            .focusTarget()
+            .focusProperties {
+                canFocus = true
+            }
+            .onFocusChanged { focusState ->
+                isVisible = focusState.isFocused
+            }
+            .alpha(if (isVisible) 1f else 0f)
+            .animateContentSize()
+            .semantics {
+                role = Role.Button
+                contentDescription = "Skip to main content. Double tap to navigate to main content area."
+            }
+    )
+}
+
+@Composable
+fun LiveRegion(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = "",
+        modifier = modifier
+            .semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = text
+            }
+            .alpha(0f)
+    )
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -86,6 +191,7 @@ fun DashboardScreen(
     val gitToken by viewModel.gitToken.collectAsStateWithLifecycle()
     val isGitConfigured by viewModel.isGitConfigured.collectAsStateWithLifecycle()
     val isBackgroundSyncEnabled by viewModel.isBackgroundSyncEnabled.collectAsStateWithLifecycle()
+    val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
 
     // Dialog state
     var showAddVaultDialog by remember { mutableStateOf(false) }
@@ -94,6 +200,16 @@ fun DashboardScreen(
     var showVaultSettingsMenu by remember { mutableStateOf(false) }
     var showAddFolderDialog by remember { mutableStateOf(false) }
     var showSyncConfirmationDialog by remember { mutableStateOf(false) }
+
+    // Screen reader announcements for sync state changes
+    val syncAnnouncement = remember(syncState) {
+        when (syncState) {
+            is SyncState.Syncing -> "Sync started, synchronizing vault with GitHub"
+            is SyncState.Success -> "Sync completed successfully"
+            is SyncState.Error -> "Sync failed: ${(syncState as SyncState.Error).error}"
+            else -> ""
+        }
+    }
 
     // Drawer state (for mobile)
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -132,6 +248,9 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            // Skip to main content link (only visible when focused)
+            SkipToMainContent()
+            
             // Adaptive Sidebar for Tablets
             if (isTablet) {
                 Box(
@@ -215,15 +334,24 @@ fun DashboardScreen(
                         },
                         navigationIcon = {
                             if (showSettingsScreen) {
-                                IconButton(onClick = { showSettingsScreen = false }) {
-                                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                                IconButton(
+                                    onClick = { showSettingsScreen = false },
+                                    modifier = Modifier.minimumTouchTarget()
+                                ) {
+                                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back to Settings")
                                 }
                             } else if (selectedNote != null) {
-                                IconButton(onClick = { viewModel.selectNote(null) }) {
+                                IconButton(
+                                    onClick = { viewModel.selectNote(null) },
+                                    modifier = Modifier.minimumTouchTarget()
+                                ) {
                                     Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back to Folder Explorer")
                                 }
                             } else if (!isTablet) {
-                                IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                                IconButton(
+                                    onClick = { coroutineScope.launch { drawerState.open() } },
+                                    modifier = Modifier.minimumTouchTarget()
+                                ) {
                                     Icon(imageVector = Icons.Default.Menu, contentDescription = "Open Sidebar")
                                 }
                             }
@@ -233,7 +361,10 @@ fun DashboardScreen(
                                 // No actions on settings screen
                             } else if (selectedNote != null) {
                                 // Delete Note
-                                IconButton(onClick = { viewModel.deleteSelectedNote() }) {
+                                IconButton(
+                                    onClick = { viewModel.deleteSelectedNote() },
+                                    modifier = Modifier.minimumTouchTarget()
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
                                         contentDescription = "Delete Note",
@@ -252,17 +383,23 @@ fun DashboardScreen(
                                         Spacer(modifier = Modifier.width(12.dp))
                                     }
                                     else -> {
-                                        IconButton(onClick = { showSyncConfirmationDialog = true }) {
+                                        IconButton(
+                                            onClick = { showSyncConfirmationDialog = true },
+                                            modifier = Modifier.minimumTouchTarget()
+                                        ) {
                                             Icon(
                                                 imageVector = Icons.Default.Refresh,
-                                                contentDescription = "Sync Vault",
+                                                contentDescription = if (isGitConfigured) "Sync Vault with GitHub" else "Configure GitHub to enable sync",
                                                 tint = if (isGitConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
                                 }
                                 Box {
-                                    IconButton(onClick = { showVaultSettingsMenu = true }) {
+                                    IconButton(
+                                        onClick = { showVaultSettingsMenu = true },
+                                        modifier = Modifier.minimumTouchTarget()
+                                    ) {
                                         Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Vault Options")
                                     }
                                     DropdownMenu(
@@ -320,9 +457,9 @@ fun DashboardScreen(
                                             showAddFolderDialog = true
                                         },
                                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        modifier = Modifier.size(44.dp)
+                                        modifier = Modifier.size(48.dp)
                                     ) {
-                                        Icon(Icons.Default.CreateNewFolder, contentDescription = "Create Folder", modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.CreateNewFolder, contentDescription = "Create Folder", modifier = Modifier.size(24.dp))
                                     }
                                 }
                                 
@@ -349,9 +486,9 @@ fun DashboardScreen(
                                             showAddNoteDialog = true
                                         },
                                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        modifier = Modifier.size(44.dp)
+                                        modifier = Modifier.size(48.dp)
                                     ) {
-                                        Icon(Icons.Default.NoteAdd, contentDescription = "Create Note", modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.NoteAdd, contentDescription = "Create Note", modifier = Modifier.size(24.dp))
                                     }
                                 }
                             }
@@ -359,11 +496,13 @@ fun DashboardScreen(
                             FloatingActionButton(
                                 onClick = { showFabMenu = !showFabMenu },
                                 containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(56.dp)
                             ) {
                                 Icon(
                                     imageVector = if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
-                                    contentDescription = "Options"
+                                    contentDescription = if (showFabMenu) "Close options" else "Open options",
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
@@ -373,10 +512,12 @@ fun DashboardScreen(
                     .weight(1f)
                     .fillMaxHeight()
             ) { innerPadding ->
+                LiveRegion(text = syncAnnouncement)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
+                        .focusTarget()
                 ) {
                     val currentScreenType = when {
                         showSettingsScreen -> DashboardScreenType.SETTINGS
@@ -479,6 +620,7 @@ fun DashboardScreen(
                                     isEditMode = isEditMode,
                                     isTabletLayout = isTablet,
                                     syncState = syncState,
+                                    selectedTheme = selectedTheme,
                                     onContentChange = { viewModel.updateSelectedNoteContent(it) },
                                     onEditModeChange = { viewModel.setEditMode(it) },
                                     onResolveConflict = { resolution, mergedText ->
@@ -671,7 +813,15 @@ fun SidebarContent(
                         shape = RoundedCornerShape(12.dp),
                         color = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                         border = if (isActive) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumTouchTarget()
+                            .semantics(mergeDescendants = true) {
+                                role = Role.Button
+                                contentDescription = "${v.name}, ${v.gitRepo}${if (isActive) ", active workspace" else ""}"
+                                selected = isActive
+                                onClick { onVaultSelect(v); true }
+                            }
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -737,7 +887,14 @@ fun SidebarContent(
                     shape = RoundedCornerShape(12.dp),
                     color = Color.Transparent,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minimumTouchTarget()
+                        .semantics(mergeDescendants = true) {
+                            role = Role.Button
+                            contentDescription = "Connect New Vault"
+                            onClick { onAddVaultClick(); true }
+                        }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -771,7 +928,14 @@ fun SidebarContent(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .minimumTouchTarget()
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    contentDescription = "Settings"
+                    onClick { onSettingsClick(); true }
+                }
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -779,7 +943,7 @@ fun SidebarContent(
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
@@ -918,6 +1082,7 @@ fun NoteWorkspace(
     isEditMode: Boolean,
     isTabletLayout: Boolean,
     syncState: SyncState,
+    selectedTheme: String = "ARTISTIC",
     onContentChange: (String) -> Unit,
     onEditModeChange: (Boolean) -> Unit,
     onResolveConflict: (String, String) -> Unit
@@ -947,19 +1112,27 @@ fun NoteWorkspace(
                         modifier = Modifier
                             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
                             .padding(2.dp)
+                            .semantics { role = Role.Tab }
                     ) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(if (!isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .clickable { onEditModeChange(false) }
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .minimumTouchTarget()
+                                .semantics {
+                                    role = Role.Tab
+                                    selected = !isEditMode
+                                    contentDescription = "Preview mode"
+                                    onClick { onEditModeChange(false); true }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.Visibility,
-                                    contentDescription = "Preview",
+                                    contentDescription = null,
                                     tint = if (!isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(14.dp)
                                 )
@@ -977,13 +1150,20 @@ fun NoteWorkspace(
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(if (isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .clickable { onEditModeChange(true) }
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .minimumTouchTarget()
+                                .semantics {
+                                    role = Role.Tab
+                                    selected = isEditMode
+                                    contentDescription = "Edit mode"
+                                    onClick { onEditModeChange(true); true }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit",
+                                    contentDescription = null,
                                     tint = if (isEditMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(14.dp)
                                 )
@@ -1024,7 +1204,10 @@ fun NoteWorkspace(
                         )
                         // Right: Live html Preview
                         Box(modifier = Modifier.weight(1f)) {
-                            MarkdownPreview(markdownString = note.content)
+                            MarkdownPreview(
+                                markdownString = note.content,
+                                isHighContrast = selectedTheme.startsWith("HIGH_CONTRAST")
+                            )
                         }
                     }
                 } else {
@@ -1035,7 +1218,10 @@ fun NoteWorkspace(
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        MarkdownPreview(markdownString = note.content)
+                        MarkdownPreview(
+                            markdownString = note.content,
+                            isHighContrast = selectedTheme.startsWith("HIGH_CONTRAST")
+                        )
                     }
                 }
             }
@@ -1218,6 +1404,7 @@ fun MarkdownEditorArea(
                 textFieldValueState = it
                 onContentChange(it.text)
             },
+            label = { Text("Markdown Editor") },
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
@@ -1236,6 +1423,10 @@ fun MarkdownEditorArea(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "Markdown Editor"
+                }
         )
 
         // Integrated LaTeX Math & Mermaid Diagram Multi-Tab Composer Assistant Panel
@@ -1297,13 +1488,21 @@ fun MarkdownEditorArea(
                             modifier = Modifier
                                 .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                                 .padding(2.dp)
+                                .semantics { role = Role.Tab }
                         ) {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.Transparent)
                                     .clickable { selectedTab = 0 }
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    .minimumTouchTarget()
+                                    .semantics {
+                                        role = Role.Tab
+                                        selected = selectedTab == 0
+                                        contentDescription = "LaTeX Math tab"
+                                        onClick { selectedTab = 0; true }
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -1318,7 +1517,14 @@ fun MarkdownEditorArea(
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(if (selectedTab == 1) MaterialTheme.colorScheme.primary else Color.Transparent)
                                     .clickable { selectedTab = 1 }
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    .minimumTouchTarget()
+                                    .semantics {
+                                        role = Role.Tab
+                                        selected = selectedTab == 1
+                                        contentDescription = "Mermaid Diagram tab"
+                                        onClick { selectedTab = 1; true }
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -1407,7 +1613,23 @@ fun MarkdownEditorArea(
                                             border = androidx.compose.foundation.BorderStroke(
                                                 width = 1.dp,
                                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                            )
+                                            ),
+                                            modifier = Modifier
+                                                .minimumTouchTarget()
+                                                .semantics {
+                                                    role = Role.Button
+                                                    contentDescription = "Insert $title math template"
+                                                    onClick {
+                                                        val txt = textFieldValueState.text
+                                                        val selection = textFieldValueState.selection
+                                                        val start = selection.start
+                                                        val end = selection.end
+                                                        val tag = if (title == "Pythagoras") "$" else "$$"
+                                                        val inserted = txt.substring(0, start) + "\n$tag\n$latexBody\n$tag\n" + txt.substring(end)
+                                                        onContentChange(inserted)
+                                                        true
+                                                    }
+                                                }
                                         ) {
                                             Text(
                                                 text = "+ $title",
@@ -1434,7 +1656,8 @@ fun MarkdownEditorArea(
                                 // Render using MarkdownPreview because it is already optimized to parse and render mermaid blocks beautifully!
                                 MarkdownPreview(
                                     markdownString = "```mermaid\n" + displayedMermaid.code + "\n```",
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize(),
+                                    isHighContrast = false
                                 )
                             }
                             
@@ -1479,7 +1702,22 @@ fun MarkdownEditorArea(
                                             border = androidx.compose.foundation.BorderStroke(
                                                 width = 1.dp,
                                                 color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
-                                            )
+                                            ),
+                                            modifier = Modifier
+                                                .minimumTouchTarget()
+                                                .semantics {
+                                                    role = Role.Button
+                                                    contentDescription = "Insert $title diagram template"
+                                                    onClick {
+                                                        val txt = textFieldValueState.text
+                                                        val selection = textFieldValueState.selection
+                                                        val start = selection.start
+                                                        val end = selection.end
+                                                        val inserted = txt.substring(0, start) + "\n```mermaid\n$codeBody\n```\n" + txt.substring(end)
+                                                        onContentChange(inserted)
+                                                        true
+                                                    }
+                                                }
                                         ) {
                                             Text(
                                                 text = "+ $title Diagram",
@@ -1505,6 +1743,15 @@ fun LazyRowForHelper(
     items: List<Pair<String, String>>,
     onClick: (String) -> Unit
 ) {
+    val descriptions = mapOf(
+        "B" to "Bold",
+        "I" to "Italic",
+        "Header" to "Heading level 2",
+        "Math Inline" to "Inline math",
+        "Math Block" to "Block math",
+        "Mermaid" to "Mermaid diagram"
+    )
+    
     androidx.compose.foundation.lazy.LazyRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
@@ -1514,7 +1761,14 @@ fun LazyRowForHelper(
                 onClick = { onClick(helper.second) },
                 shape = RoundedCornerShape(6.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 2.dp
+                tonalElevation = 2.dp,
+                modifier = Modifier
+                    .minimumTouchTarget()
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = descriptions[helper.first] ?: helper.first
+                        onClick { onClick(helper.second); true }
+                    }
             ) {
                 Text(
                     text = helper.first,
@@ -2058,7 +2312,9 @@ fun SettingsScreen(
                         "CYBERPUNK" to "Neon Cyber",
                         "EMERALD" to "Sage Forest",
                         "CLASSIC" to "Warm Amber",
-                        "LIGHT" to "Lavender Light"
+                        "LIGHT" to "Lavender Light",
+                        "HIGH_CONTRAST_DARK" to "High Contrast Dark",
+                        "HIGH_CONTRAST_LIGHT" to "High Contrast Light"
                     )
                     items(themes) { (themeKey, themeLabel) ->
                         val isSelected = selectedTheme == themeKey
@@ -2461,11 +2717,15 @@ fun FolderExplorer(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchChange,
+            label = { Text("Search files and folders") },
             placeholder = { Text("Search files and folders...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { onSearchChange("") }) {
+                    IconButton(
+                        onClick = { onSearchChange("") },
+                        modifier = Modifier.minimumTouchTarget()
+                    ) {
                         Icon(Icons.Default.Close, contentDescription = "Clear search")
                     }
                 }
@@ -2481,6 +2741,7 @@ fun FolderExplorer(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 12.dp)
+                .semantics { role = Role.Button }
         )
 
         // 2. Navigation Header / Breadcrumbs (Only show if not searching)
@@ -2497,7 +2758,7 @@ fun FolderExplorer(
                             val parent = if (currentPath.contains("/")) currentPath.substringBeforeLast("/") else ""
                             onPathChange(parent)
                         },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minimumTouchTarget()
                     ) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
@@ -2515,6 +2776,7 @@ fun FolderExplorer(
                     modifier = Modifier
                         .weight(1f)
                         .horizontalScroll(scrollState)
+                        .semantics { role = Role.Button }
                 ) {
                     Text(
                         text = "Cabinet Root",
@@ -2523,7 +2785,13 @@ fun FolderExplorer(
                         color = if (currentPath.isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .clickable { onPathChange("") }
+                            .minimumTouchTarget()
                             .padding(vertical = 4.dp, horizontal = 6.dp)
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = "Navigate to root folder"
+                                onClick { onPathChange(""); true }
+                            }
                     )
 
                     if (currentPath.isNotEmpty()) {
@@ -2544,7 +2812,13 @@ fun FolderExplorer(
                                 color = if (isLast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .clickable { onPathChange(targetPath) }
+                                    .minimumTouchTarget()
                                     .padding(vertical = 4.dp, horizontal = 6.dp)
+                                    .semantics {
+                                        role = Role.Button
+                                        contentDescription = "Navigate to $segment folder"
+                                        onClick { onPathChange(targetPath); true }
+                                    }
                             )
                         }
                     }
@@ -2627,7 +2901,14 @@ fun FolderExplorer(
                             shape = RoundedCornerShape(16.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .minimumTouchTarget()
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = "Open folder $folder"
+                                    onClick { onPathChange(fullFolderPath); true }
+                                }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -2635,7 +2916,7 @@ fun FolderExplorer(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Folder,
-                                    contentDescription = "Folder",
+                                    contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(26.dp)
                                 )
@@ -2652,7 +2933,7 @@ fun FolderExplorer(
                                 Box {
                                     IconButton(
                                         onClick = { showFolderMenu = true },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.minimumTouchTarget()
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.MoreVert,
