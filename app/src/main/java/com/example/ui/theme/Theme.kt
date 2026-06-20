@@ -101,6 +101,42 @@ private val ClassicColorScheme = darkColorScheme(
     onError = Color(0xFF5D0000)
 )
 
+private val HighContrastDarkColorScheme = darkColorScheme(
+    primary = HighContrastDarkPrimary,
+    onPrimary = HighContrastDarkOnPrimary,
+    primaryContainer = HighContrastDarkSurfaceVariant,
+    onPrimaryContainer = HighContrastDarkPrimary,
+    secondary = HighContrastDarkSecondary,
+    onSecondary = HighContrastDarkOnSecondary,
+    background = HighContrastDarkBg,
+    onBackground = HighContrastDarkPrimary,
+    surface = HighContrastDarkSurface,
+    onSurface = HighContrastDarkPrimary,
+    surfaceVariant = HighContrastDarkSurfaceVariant,
+    onSurfaceVariant = HighContrastDarkPrimary,
+    outline = HighContrastDarkOutline,
+    error = HighContrastDarkError,
+    onError = HighContrastDarkOnError
+)
+
+private val HighContrastLightColorScheme = lightColorScheme(
+    primary = HighContrastLightPrimary,
+    onPrimary = HighContrastLightOnPrimary,
+    primaryContainer = HighContrastLightSurfaceVariant,
+    onPrimaryContainer = HighContrastLightPrimary,
+    secondary = HighContrastLightSecondary,
+    onSecondary = HighContrastLightOnSecondary,
+    background = HighContrastLightBg,
+    onBackground = HighContrastLightPrimary,
+    surface = HighContrastLightSurface,
+    onSurface = HighContrastLightPrimary,
+    surfaceVariant = HighContrastLightSurfaceVariant,
+    onSurfaceVariant = HighContrastLightPrimary,
+    outline = HighContrastLightOutline,
+    error = HighContrastLightError,
+    onError = HighContrastLightOnError
+)
+
 @Composable
 fun MyApplicationTheme(
     themeName: String = "ARTISTIC",
@@ -112,6 +148,8 @@ fun MyApplicationTheme(
         "EMERALD" -> EmeraldColorScheme
         "CLASSIC" -> ClassicColorScheme
         "LIGHT" -> LightColorScheme
+        "HIGH_CONTRAST_DARK" -> HighContrastDarkColorScheme
+        "HIGH_CONTRAST_LIGHT" -> HighContrastLightColorScheme
         else -> if (darkTheme) DarkColorScheme else LightColorScheme
     }
 

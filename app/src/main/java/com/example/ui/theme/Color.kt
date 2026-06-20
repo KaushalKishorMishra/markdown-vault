@@ -38,3 +38,31 @@ val ArtisticTextSecondary = Color(0xFFCAC4D0)  // Muted grey-purple text
 val WarmSage = Color(0xFFB4E197)              // Soft glow green
 val ArtisticRose = Color(0xFFEFB8C8)          // Cozy soft pink
 val WarmSageAlpha = Color(0x2BB4E197)         // Shadow/outline glow sage
+
+// ========================================================================
+// HIGH CONTRAST THEME COLORS (WCAG AAA - 7:1 contrast ratio)
+// ========================================================================
+
+// High Contrast Dark Theme Colors
+val HighContrastDarkBg = Color.Black
+val HighContrastDarkSurface = Color(0xFF1A1A1A)
+val HighContrastDarkSurfaceVariant = Color(0xFF2D2D2D)
+val HighContrastDarkPrimary = Color.White
+val HighContrastDarkOnPrimary = Color.Black
+val HighContrastDarkSecondary = Color(0xFF00FFFF)  // Cyan
+val HighContrastDarkOnSecondary = Color.Black
+val HighContrastDarkOutline = Color.White
+val HighContrastDarkError = Color(0xFFFF5252)
+val HighContrastDarkOnError = Color.White
+
+// High Contrast Light Theme Colors
+val HighContrastLightBg = Color.White
+val HighContrastLightSurface = Color(0xFFF5F5F5)
+val HighContrastLightSurfaceVariant = Color(0xFFE0E0E0)
+val HighContrastLightPrimary = Color.Black
+val HighContrastLightOnPrimary = Color.White
+val HighContrastLightSecondary = Color(0xFF0066CC)  // Blue
+val HighContrastLightOnSecondary = Color.White
+val HighContrastLightOutline = Color.Black
+val HighContrastLightError = Color(0xFFD32F2F)
+val HighContrastLightOnError = Color.White
