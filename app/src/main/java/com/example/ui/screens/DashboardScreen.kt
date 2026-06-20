@@ -79,7 +79,6 @@ enum class DashboardScreenType {
 // Accessibility helpers
 val MinimumTouchTarget = Modifier
     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-    .wrapContentSize(Alignment.Center)
 
 fun Modifier.minimumTouchTarget(): Modifier = this.then(MinimumTouchTarget)
 
@@ -134,12 +133,9 @@ fun Modifier.headingRole(level: Int = 1): Modifier =
 fun SkipToMainContent() {
     var isVisible by remember { mutableStateOf(false) }
     
-    Text(
-        text = "Skip to main content",
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primary)
-            .padding(16.dp)
             .focusTarget()
             .focusProperties {
                 canFocus = true
@@ -147,13 +143,20 @@ fun SkipToMainContent() {
             .onFocusChanged { focusState ->
                 isVisible = focusState.isFocused
             }
-            .alpha(if (isVisible) 1f else 0f)
-            .animateContentSize()
-            .semantics {
-                role = Role.Button
-                contentDescription = "Skip to main content. Double tap to navigate to main content area."
-            }
-    )
+            .background(if (isVisible) MaterialTheme.colorScheme.primary else Color.Transparent)
+            .padding(if (isVisible) 16.dp else 0.dp)
+            .heightIn(min = 1.dp)
+    ) {
+        if (isVisible) {
+            Text(
+                text = "Skip to main content",
+                modifier = Modifier.semantics {
+                    role = Role.Button
+                    contentDescription = "Skip to main content. Double tap to navigate to main content area."
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -243,14 +246,14 @@ fun DashboardScreen(
             }
         }
     ) {
+        // Skip to main content link (only visible when focused)
+        SkipToMainContent()
+        
         Row(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Skip to main content link (only visible when focused)
-            SkipToMainContent()
-            
             // Adaptive Sidebar for Tablets
             if (isTablet) {
                 Box(
@@ -517,7 +520,6 @@ fun DashboardScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
-                        .focusTarget()
                 ) {
                     val currentScreenType = when {
                         showSettingsScreen -> DashboardScreenType.SETTINGS
