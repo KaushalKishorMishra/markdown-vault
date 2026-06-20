@@ -63,8 +63,10 @@ import com.example.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.SyncState
 import com.example.data.db.*
+import com.example.ui.components.FormatToolbar
 import com.example.ui.components.MarkdownPreview
 import com.example.ui.components.MathView
+import com.example.ui.components.OptionChip
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.VaultViewModel
 import kotlinx.coroutines.launch
@@ -1493,24 +1495,8 @@ fun MarkdownEditorArea(
     )
 
     Column(modifier = modifier) {
-        // Appending formatting tags toolbar helper
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            val helpers = listOf(
-                Pair("B", "**"),
-                Pair("I", "*"),
-                Pair("Header", "## "),
-                Pair("Math Inline", "$"),
-                Pair("Math Block", "$$"),
-                Pair("Mermaid", "```mermaid\n")
-            )
-
-            LazyRowForHelper(helpers) { symbol ->
+        FormatToolbar(
+            onInsert = { symbol ->
                 val txt = textFieldValueState.text
                 val selection = textFieldValueState.selection
                 val start = selection.start
@@ -1526,7 +1512,7 @@ fun MarkdownEditorArea(
                 
                 onContentChange(inserted)
             }
-        }
+        )
 
         TextField(
             value = textFieldValueState,
@@ -1863,50 +1849,6 @@ fun MarkdownEditorArea(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun LazyRowForHelper(
-    items: List<Pair<String, String>>,
-    onClick: (String) -> Unit
-) {
-    val descriptions = mapOf(
-        "B" to "Bold",
-        "I" to "Italic",
-        "Header" to "Heading level 2",
-        "Math Inline" to "Inline math",
-        "Math Block" to "Block math",
-        "Mermaid" to "Mermaid diagram"
-    )
-    
-    androidx.compose.foundation.lazy.LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-    ) {
-        items(items) { helper ->
-            Surface(
-                onClick = { onClick(helper.second) },
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 2.dp,
-                modifier = Modifier
-                    .minimumTouchTarget()
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = descriptions[helper.first] ?: helper.first
-                        onClick { onClick(helper.second); true }
-                    }
-            ) {
-                Text(
-                    text = helper.first,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
             }
         }
     }
@@ -2447,12 +2389,10 @@ fun SettingsScreen(
                         "HIGH_CONTRAST_LIGHT" to "High Contrast Light"
                     )
                     items(themes) { (themeKey, themeLabel) ->
-                        val isSelected = selectedTheme == themeKey
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { onSelectTheme(themeKey) },
-                            label = { Text(themeLabel, fontSize = 11.sp) },
-                            shape = RoundedCornerShape(8.dp)
+                        OptionChip(
+                            label = themeLabel,
+                            isSelected = selectedTheme == themeKey,
+                            onClick = { onSelectTheme(themeKey) }
                         )
                     }
                 }
