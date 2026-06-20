@@ -119,22 +119,40 @@ private val HighContrastDarkColorScheme = darkColorScheme(
     onError = HighContrastDarkOnError
 )
 
-private val GlassColorScheme = lightColorScheme(
-    primary = GlassPrimary,
-    onPrimary = GlassOnPrimary,
-    primaryContainer = GlassPrimaryContainer,
-    onPrimaryContainer = GlassOnPrimaryContainer,
-    secondary = GlassSecondary,
-    onSecondary = GlassOnSecondary,
-    background = GlassBg,
-    onBackground = GlassText,
-    surface = GlassSurface,
-    onSurface = GlassText,
-    surfaceVariant = GlassSurfaceVariant,
-    onSurfaceVariant = GlassTextSecondary,
-    outline = GlassOutline,
-    error = GlassError,
-    onError = GlassOnError
+private val GlassLightColorScheme = lightColorScheme(
+    primary = GlassLightPrimary,
+    onPrimary = GlassLightOnPrimary,
+    primaryContainer = GlassLightPrimaryContainer,
+    onPrimaryContainer = GlassLightOnPrimaryContainer,
+    secondary = GlassLightSecondary,
+    onSecondary = GlassLightOnSecondary,
+    background = GlassLightBg,
+    onBackground = GlassLightText,
+    surface = GlassLightSurface,
+    onSurface = GlassLightText,
+    surfaceVariant = GlassLightSurfaceVariant,
+    onSurfaceVariant = GlassLightTextSecondary,
+    outline = GlassLightOutline,
+    error = GlassLightError,
+    onError = GlassLightOnError
+)
+
+private val GlassDarkColorScheme = darkColorScheme(
+    primary = GlassDarkPrimary,
+    onPrimary = GlassDarkOnPrimary,
+    primaryContainer = GlassDarkPrimaryContainer,
+    onPrimaryContainer = GlassDarkOnPrimaryContainer,
+    secondary = GlassDarkSecondary,
+    onSecondary = GlassDarkOnSecondary,
+    background = GlassDarkBg,
+    onBackground = GlassDarkText,
+    surface = GlassDarkSurface,
+    onSurface = GlassDarkText,
+    surfaceVariant = GlassDarkSurfaceVariant,
+    onSurfaceVariant = GlassDarkTextSecondary,
+    outline = GlassDarkOutline,
+    error = GlassDarkError,
+    onError = GlassDarkOnError
 )
 
 private val HighContrastLightColorScheme = lightColorScheme(
@@ -166,11 +184,9 @@ fun MyApplicationTheme(
         "CYBERPUNK" -> CyberpunkColorScheme
         "EMERALD" -> EmeraldColorScheme
         "CLASSIC" -> ClassicColorScheme
-        "GLASS" -> if (Build.VERSION.SDK_INT >= 31) {
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        } else {
-            GlassColorScheme
-        }
+        "GLASS_LIGHT" -> GlassLightColorScheme
+        "GLASS_DARK" -> GlassDarkColorScheme
+        "GLASS" -> if (darkTheme) GlassDarkColorScheme else GlassLightColorScheme
         "LIGHT" -> LightColorScheme
         "HIGH_CONTRAST_DARK" -> HighContrastDarkColorScheme
         "HIGH_CONTRAST_LIGHT" -> HighContrastLightColorScheme
