@@ -11,6 +11,7 @@ import com.example.data.db.*
 import com.example.data.security.SecurePreferences
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import com.example.BuildConfig
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -83,6 +84,13 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
     val syncStatus: StateFlow<SyncState> = syncEngine.syncState
 
     init {
+        // Pre-populate dummy data if flag is set and no vaults exist
+        viewModelScope.launch {
+            if (BuildConfig.DUMMY_DATA_ENABLED == "true") {
+                maybeInsertDummyData()
+            }
+        }
+
         // Automatically activate first vault if available
         viewModelScope.launch {
             allVaults.collect { list ->
@@ -105,6 +113,179 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private suspend fun maybeInsertDummyData() {
+        val existing = vaultDao.getAllVaults()
+        if (existing.isNotEmpty()) return
+
+        val vaultId = UUID.randomUUID().toString()
+        val sampleVault = Vault(
+            id = vaultId,
+            name = "Demo Vault",
+            gitRepo = "",
+            branch = "main",
+            vaultType = "OBSIDIAN",
+            lastSynced = 0L,
+            localPath = ""
+        )
+        vaultDao.insertVault(sampleVault)
+
+        val now = System.currentTimeMillis()
+        val sampleNotes = listOf(
+            Note(
+                id = "$vaultId:welcome.md",
+                vaultId = vaultId,
+                filePath = "welcome.md",
+                title = "Welcome to Markdown Vault",
+                content = """# Welcome 📝
+
+This is a demo note. You can edit, delete, or organize your notes into folders.
+
+## Features
+
+- **Markdown editing** with live preview
+- **Math equations** via LaTeX: ${'$'}E = mc^2${'$'}
+- **Mermaid diagrams** below
+- **Git sync** with GitHub
+- **Trash** with 30-day auto-cleanup
+
+```mermaid
+graph LR
+    A[Write Notes] --> B[Preview]
+    B --> C[Sync to GitHub]
+```""",
+                syncStatus = "SYNCED",
+                updatedAt = now
+            ),
+            Note(
+                id = "$vaultId:meeting-notes.md",
+                vaultId = vaultId,
+                filePath = "meeting-notes.md",
+                title = "Meeting Notes Template",
+                content = """# Meeting Notes
+
+**Date:** 
+**Attendees:** 
+**Project:** 
+
+## Agenda
+
+1. 
+2. 
+3. 
+
+## Discussion
+
+## Action Items
+
+- [ ] 
+- [ ] 
+- [ ] 
+
+## Next Steps""",
+                syncStatus = "LOCAL_ONLY",
+                updatedAt = now - 3600000
+            ),
+            Note(
+                id = "$vaultId:projects/project-alpha.md",
+                vaultId = vaultId,
+                filePath = "projects/project-alpha.md",
+                title = "Project Alpha",
+                content = """# Project Alpha
+
+## Status: In Progress
+
+### Milestones
+- [x] Research phase
+- [ ] Prototype development
+- [ ] Testing
+- [ ] Deployment
+
+### Notes
+The prototype should be ready by next sprint.
+
+### Math
+The quadratic formula: ${'$'}x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}${'$'}""",
+                syncStatus = "SYNCED",
+                updatedAt = now - 7200000
+            ),
+            Note(
+                id = "$vaultId:projects/project-beta.md",
+                vaultId = vaultId,
+                filePath = "projects/project-beta.md",
+                title = "Project Beta",
+                content = """# Project Beta
+
+## Overview
+A secondary project running in parallel.
+
+## Tasks
+- [ ] Set up repository
+- [ ] Configure CI/CD
+- [ ] Write documentation""",
+                syncStatus = "LOCAL_ONLY",
+                updatedAt = now - 10800000
+            ),
+            Note(
+                id = "$vaultId:daily/journal-2024-01.md",
+                vaultId = vaultId,
+                filePath = "daily/journal-2024-01.md",
+                title = "January Journal",
+                content = """# January Journal
+
+## Week 1
+Started the new year with a fresh vault setup.
+
+## Week 2
+Exploring the math rendering capabilities.
+
+Inline: ${'$'}\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}${'$'}
+
+Display:
+${'$'}${'$'}\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}${'$'}${'$'}""",
+                syncStatus = "LOCAL_ONLY",
+                updatedAt = now - 86400000
+            ),
+            Note(
+                id = "$vaultId:recipes/pasta.md",
+                vaultId = vaultId,
+                filePath = "recipes/pasta.md",
+                title = "Pasta Recipe",
+                content = """# Classic Pasta
+
+## Ingredients
+- 200g pasta
+- 2 tbsp olive oil
+- 3 cloves garlic
+- Salt and pepper to taste
+
+## Instructions
+1. Boil water and cook pasta
+2. Sauté garlic in olive oil
+3. Mix together and serve""",
+                syncStatus = "LOCAL_ONLY",
+                updatedAt = now - 172800000
+            ),
+            Note(
+                id = "$vaultId:archive/old-notes.md",
+                vaultId = vaultId,
+                filePath = "archive/old-notes.md",
+                title = "Archived Thoughts",
+                content = """# Archived Notes
+
+## Random Thoughts
+- Remember to back up regularly
+- Check the sync status
+- Review the trash policy""",
+                syncStatus = "SYNCED",
+                updatedAt = now - 259200000
+            )
+        )
+
+        sampleNotes.forEach { noteDao.insertNote(it) }
+        _activeVault.value = sampleVault
+        _selectedNote.value = sampleNotes.first()
     }
 
     fun selectVault(vault: Vault) {
