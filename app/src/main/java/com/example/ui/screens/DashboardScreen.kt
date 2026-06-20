@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,7 +64,9 @@ import com.example.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.SyncState
 import com.example.data.db.*
+import com.example.ui.components.FormatAction
 import com.example.ui.components.FormatToolbar
+import com.example.ui.components.FormatType
 import com.example.ui.components.MarkdownPreview
 import com.example.ui.components.MathView
 import com.example.ui.components.OptionChip
@@ -1219,7 +1222,12 @@ fun NoteWorkspace(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(if (!isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .background(
+                                    animateColorAsState(
+                                        if (!isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        label = "previewBg"
+                                    ).value
+                                )
                                 .clickable { onEditModeChange(false) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .semantics {
@@ -1249,7 +1257,12 @@ fun NoteWorkspace(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(if (isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .background(
+                                    animateColorAsState(
+                                        if (isEditMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        label = "editBg"
+                                    ).value
+                                )
                                 .clickable { onEditModeChange(true) }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                                 .semantics {
@@ -1311,22 +1324,32 @@ fun NoteWorkspace(
                         }
                     }
                 } else {
-                    if (isEditMode) {
-                        MarkdownEditorArea(
-                            content = note.content,
-                            onContentChange = onContentChange,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        MarkdownPreview(
-                            markdownString = note.content,
-                            isHighContrast = selectedTheme.startsWith("HIGH_CONTRAST")
-                        )
+                    Crossfade(
+                        targetState = isEditMode,
+                        animationSpec = tween(200),
+                        label = "editPreviewCrossfade"
+                    ) { editing ->
+                        if (editing) {
+                            MarkdownEditorArea(
+                                content = note.content,
+                                onContentChange = onContentChange,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            MarkdownPreview(
+                                markdownString = note.content,
+                                isHighContrast = selectedTheme.startsWith("HIGH_CONTRAST")
+                            )
+                        }
                     }
                 }
             }
             
-            if (isEditMode) {
+            AnimatedVisibility(
+                visible = isEditMode,
+                enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+            ) {
                 val wordCount = remember(note.content) {
                     val trimmed = note.content.trim()
                     if (trimmed.isEmpty()) 0 else trimmed.split(Regex("\\s+")).size
@@ -1458,7 +1481,6 @@ fun MarkdownEditorArea(
         mutableStateOf(TextFieldValue(text = content, selection = androidx.compose.ui.text.TextRange(sel)))
     }
 
-    var isAssistantPanelExpanded by remember { mutableStateOf(true) }
     var selectedTab by remember { mutableStateOf(0) } // 0: LaTeX Math, 1: Mermaid Diagrams
     
     val cursorIndex = textFieldValueState.selection.start
@@ -1496,20 +1518,29 @@ fun MarkdownEditorArea(
 
     Column(modifier = modifier) {
         FormatToolbar(
-            onInsert = { symbol ->
+            onInsert = { action ->
                 val txt = textFieldValueState.text
                 val selection = textFieldValueState.selection
                 val start = selection.start
                 val end = selection.end
-                
-                val inserted = if (symbol == "```mermaid\n") {
-                    txt.substring(0, start) + "\n```mermaid\ngraph TD\n    A[Start] --> B[Goal];\n```\n" + txt.substring(end)
-                } else if (symbol.contains("#")) {
-                    txt.substring(0, start) + "\n$symbol" + txt.substring(end)
-                } else {
-                    txt.substring(0, start) + "$symbol$symbol" + txt.substring(end)
+                val selected = if (start != end) txt.substring(start, end) else ""
+
+                val inserted = when (action.type) {
+                    FormatType.Wrap -> {
+                        if (selected.isNotEmpty()) {
+                            txt.substring(0, start) + action.prefix + selected + action.suffix + txt.substring(end)
+                        } else {
+                            txt.substring(0, start) + action.prefix + action.suffix + txt.substring(end)
+                        }
+                    }
+                    FormatType.PrependLine -> {
+                        txt.substring(0, start) + "\n" + action.prefix + txt.substring(end)
+                    }
+                    FormatType.InsertTemplate -> {
+                        txt.substring(0, start) + (action.template ?: "") + txt.substring(end)
+                    }
                 }
-                
+
                 onContentChange(inserted)
             }
         )
@@ -1562,22 +1593,20 @@ fun MarkdownEditorArea(
             )
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
-                // Header of Drawer Panel
+                // Header with icon and tab switcher
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f).clickable { isAssistantPanelExpanded = !isAssistantPanelExpanded }
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(24.dp)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(
-                                    if (activeEquation != null || activeMermaid != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    if (activeEquation != null || activeMermaid != null)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                     else MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)
                                 ),
                             contentAlignment = Alignment.Center
@@ -1586,136 +1615,143 @@ fun MarkdownEditorArea(
                                 text = if (selectedTab == 0) "∑" else "📊",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Black,
-                                color = if (activeEquation != null || activeMermaid != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                                color = if (activeEquation != null || activeMermaid != null)
+                                    MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (selectedTab == 0) "LaTeX Mathematical Editor" else "Mermaid Diagram Composer",
+                            text = if (selectedTab == 0) "LaTeX Math" else "Mermaid Diagrams",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
-                    // Compact Segmented Tab Switcher (only show if panel is expanded)
-                    if (isAssistantPanelExpanded) {
-                        Row(
-                            modifier = Modifier
-                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                                .padding(2.dp)
-                                .semantics { role = Role.Tab }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { selectedTab = 0 }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                                    .minimumTouchTarget()
-                                    .semantics {
-                                        role = Role.Tab
-                                        selected = selectedTab == 0
-                                        contentDescription = "LaTeX Math tab"
-                                        onClick { selectedTab = 0; true }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "Math",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (selectedTab == 1) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { selectedTab = 1 }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                                    .minimumTouchTarget()
-                                    .semantics {
-                                        role = Role.Tab
-                                        selected = selectedTab == 1
-                                        contentDescription = "Mermaid Diagram tab"
-                                        onClick { selectedTab = 1; true }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "Mermaid",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-
-                    Icon(
-                        imageVector = if (isAssistantPanelExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Toggle Panel",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // Tab Switcher
+                    Row(
                         modifier = Modifier
-                            .size(20.dp)
-                            .clickable { isAssistantPanelExpanded = !isAssistantPanelExpanded }
-                    )
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                            .padding(2.dp)
+                            .semantics { role = Role.Tab }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { selectedTab = 0 }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .semantics {
+                                    role = Role.Tab
+                                    selected = selectedTab == 0
+                                    contentDescription = "LaTeX Math tab"
+                                    onClick { selectedTab = 0; true }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Math",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selectedTab == 1) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .clickable { selectedTab = 1 }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .semantics {
+                                    role = Role.Tab
+                                    selected = selectedTab == 1
+                                    contentDescription = "Mermaid Diagram tab"
+                                    onClick { selectedTab = 1; true }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Mermaid",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
 
-                if (isAssistantPanelExpanded) {
-                    Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                     if (selectedTab == 0) {
                         // --- TAB 1: LATEX MATH ---
-                        if (displayedEquation != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(95.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                            ) {
-                                MathView(
-                                    latex = displayedEquation.latex,
-                                    isBlock = displayedEquation.isBlock,
-                                    modifier = Modifier.fillMaxSize(),
-                                    backgroundColor = Color.Transparent,
-                                    textColor = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(6.dp))
-                            
-                            Text(
-                                text = if (displayedEquation.isBlock) "$$" + displayedEquation.latex + "$$"
-                                       else "$" + displayedEquation.latex + "$",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            )
-                        } else {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = "No math equations detected at current text position. Select a quick mathematical template to insert at cursor:",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                )
-                                
-                                androidx.compose.foundation.lazy.LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    contentPadding = PaddingValues(bottom = 2.dp)
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            if (displayedEquation != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(95.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                                 ) {
-                                    items(mathTemplates) { item ->
-                                        val title = item.first
-                                        val latexBody = item.second
-                                        Surface(
-                                            onClick = {
+                                    MathView(
+                                        latex = displayedEquation.latex,
+                                        isBlock = displayedEquation.isBlock,
+                                        modifier = Modifier.fillMaxSize(),
+                                        backgroundColor = Color.Transparent,
+                                        textColor = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Text(
+                                    text = if (displayedEquation.isBlock) "$$" + displayedEquation.latex + "$$"
+                                           else "$" + displayedEquation.latex + "$",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            Text(
+                                text = "Quick-add math templates:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(bottom = 2.dp)
+                            ) {
+                                items(mathTemplates) { item ->
+                                    val title = item.first
+                                    val latexBody = item.second
+                                    Surface(
+                                        onClick = {
+                                            val txt = textFieldValueState.text
+                                            val selection = textFieldValueState.selection
+                                            val start = selection.start
+                                            val end = selection.end
+                                            val tag = if (title == "Pythagoras") "$" else "$$"
+                                            val inserted = txt.substring(0, start) + "\n$tag\n$latexBody\n$tag\n" + txt.substring(end)
+                                            onContentChange(inserted)
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                                        ),
+                                        modifier = Modifier.semantics {
+                                            role = Role.Button
+                                            contentDescription = "Insert $title math template"
+                                            onClick {
                                                 val txt = textFieldValueState.text
                                                 val selection = textFieldValueState.selection
                                                 val start = selection.start
@@ -1723,130 +1759,107 @@ fun MarkdownEditorArea(
                                                 val tag = if (title == "Pythagoras") "$" else "$$"
                                                 val inserted = txt.substring(0, start) + "\n$tag\n$latexBody\n$tag\n" + txt.substring(end)
                                                 onContentChange(inserted)
-                                            },
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                                            border = androidx.compose.foundation.BorderStroke(
-                                                width = 1.dp,
-                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                            ),
-                                            modifier = Modifier
-                                                .minimumTouchTarget()
-                                                .semantics {
-                                                    role = Role.Button
-                                                    contentDescription = "Insert $title math template"
-                                                    onClick {
-                                                        val txt = textFieldValueState.text
-                                                        val selection = textFieldValueState.selection
-                                                        val start = selection.start
-                                                        val end = selection.end
-                                                        val tag = if (title == "Pythagoras") "$" else "$$"
-                                                        val inserted = txt.substring(0, start) + "\n$tag\n$latexBody\n$tag\n" + txt.substring(end)
-                                                        onContentChange(inserted)
-                                                        true
-                                                    }
-                                                }
-                                        ) {
-                                            Text(
-                                                text = "+ $title",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                            )
+                                                true
+                                            }
                                         }
+                                    ) {
+                                        Text(
+                                            text = "+ $title",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
                                     }
                                 }
                             }
                         }
                     } else {
                         // --- TAB 2: MERMAID DIAGRAMS ---
-                        if (displayedMermaid != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(130.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                            ) {
-                                // Render using MarkdownPreview because it is already optimized to parse and render mermaid blocks beautifully!
-                                MarkdownPreview(
-                                    markdownString = "```mermaid\n" + displayedMermaid.code + "\n```",
-                                    modifier = Modifier.fillMaxSize(),
-                                    isHighContrast = false
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(6.dp))
-                            
-                            Text(
-                                text = "Active Mermaid Code under cursor (" + displayedMermaid.code.substringBefore("\n") + " ...)",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.secondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            )
-                        } else {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(
-                                    text = "No Mermaid codeblock detected. Select a dynamic flowchart, sequence, or timeline template to insert at cursor:",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                )
-                                
-                                androidx.compose.foundation.lazy.LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    contentPadding = PaddingValues(bottom = 2.dp)
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            if (displayedMermaid != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(130.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                                 ) {
-                                    items(mermaidTemplates) { item ->
-                                        val title = item.first
-                                        val codeBody = item.second
-                                        Surface(
-                                            onClick = {
+                                    MarkdownPreview(
+                                        markdownString = "```mermaid\n" + displayedMermaid.code + "\n```",
+                                        modifier = Modifier.fillMaxSize(),
+                                        isHighContrast = false
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Text(
+                                    text = "Active Mermaid: " + displayedMermaid.code.substringBefore("\n") + " ...",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            Text(
+                                text = "Quick-add diagram templates:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(bottom = 2.dp)
+                            ) {
+                                items(mermaidTemplates) { item ->
+                                    val title = item.first
+                                    val codeBody = item.second
+                                    Surface(
+                                        onClick = {
+                                            val txt = textFieldValueState.text
+                                            val selection = textFieldValueState.selection
+                                            val start = selection.start
+                                            val end = selection.end
+                                            val inserted = txt.substring(0, start) + "\n```mermaid\n$codeBody\n```\n" + txt.substring(end)
+                                            onContentChange(inserted)
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                                        ),
+                                        modifier = Modifier.semantics {
+                                            role = Role.Button
+                                            contentDescription = "Insert $title diagram template"
+                                            onClick {
                                                 val txt = textFieldValueState.text
                                                 val selection = textFieldValueState.selection
                                                 val start = selection.start
                                                 val end = selection.end
                                                 val inserted = txt.substring(0, start) + "\n```mermaid\n$codeBody\n```\n" + txt.substring(end)
                                                 onContentChange(inserted)
-                                            },
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
-                                            border = androidx.compose.foundation.BorderStroke(
-                                                width = 1.dp,
-                                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
-                                            ),
-                                            modifier = Modifier
-                                                .minimumTouchTarget()
-                                                .semantics {
-                                                    role = Role.Button
-                                                    contentDescription = "Insert $title diagram template"
-                                                    onClick {
-                                                        val txt = textFieldValueState.text
-                                                        val selection = textFieldValueState.selection
-                                                        val start = selection.start
-                                                        val end = selection.end
-                                                        val inserted = txt.substring(0, start) + "\n```mermaid\n$codeBody\n```\n" + txt.substring(end)
-                                                        onContentChange(inserted)
-                                                        true
-                                                    }
-                                                }
-                                        ) {
-                                            Text(
-                                                text = "+ $title Diagram",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                            )
+                                                true
+                                            }
                                         }
+                                    ) {
+                                        Text(
+                                            text = "+ $title Diagram",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
                                     }
                                 }
                             }
-                        }
                     }
                 }
             }
