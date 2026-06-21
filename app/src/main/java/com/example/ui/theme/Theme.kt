@@ -1,15 +1,14 @@
 package com.example.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
 private val DarkColorScheme = darkColorScheme(
     primary = ArtisticPrimary,
@@ -119,42 +118,6 @@ private val HighContrastDarkColorScheme = darkColorScheme(
     onError = HighContrastDarkOnError
 )
 
-private val GlassLightColorScheme = lightColorScheme(
-    primary = GlassLightPrimary,
-    onPrimary = GlassLightOnPrimary,
-    primaryContainer = GlassLightPrimaryContainer,
-    onPrimaryContainer = GlassLightOnPrimaryContainer,
-    secondary = GlassLightSecondary,
-    onSecondary = GlassLightOnSecondary,
-    background = GlassLightBg,
-    onBackground = GlassLightText,
-    surface = GlassLightSurface,
-    onSurface = GlassLightText,
-    surfaceVariant = GlassLightSurfaceVariant,
-    onSurfaceVariant = GlassLightTextSecondary,
-    outline = GlassLightOutline,
-    error = GlassLightError,
-    onError = GlassLightOnError
-)
-
-private val GlassDarkColorScheme = darkColorScheme(
-    primary = GlassDarkPrimary,
-    onPrimary = GlassDarkOnPrimary,
-    primaryContainer = GlassDarkPrimaryContainer,
-    onPrimaryContainer = GlassDarkOnPrimaryContainer,
-    secondary = GlassDarkSecondary,
-    onSecondary = GlassDarkOnSecondary,
-    background = GlassDarkBg,
-    onBackground = GlassDarkText,
-    surface = GlassDarkSurface,
-    onSurface = GlassDarkText,
-    surfaceVariant = GlassDarkSurfaceVariant,
-    onSurfaceVariant = GlassDarkTextSecondary,
-    outline = GlassDarkOutline,
-    error = GlassDarkError,
-    onError = GlassDarkOnError
-)
-
 private val HighContrastLightColorScheme = lightColorScheme(
     primary = HighContrastLightPrimary,
     onPrimary = HighContrastLightOnPrimary,
@@ -173,20 +136,24 @@ private val HighContrastLightColorScheme = lightColorScheme(
     onError = HighContrastLightOnError
 )
 
+private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(24.dp)
+)
+
 @Composable
 fun MyApplicationTheme(
     themeName: String = "ARTISTIC",
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val context = LocalContext.current
     val colorScheme = when (themeName) {
         "CYBERPUNK" -> CyberpunkColorScheme
         "EMERALD" -> EmeraldColorScheme
         "CLASSIC" -> ClassicColorScheme
-        "GLASS_LIGHT" -> GlassLightColorScheme
-        "GLASS_DARK" -> GlassDarkColorScheme
-        "GLASS" -> if (darkTheme) GlassDarkColorScheme else GlassLightColorScheme
         "LIGHT" -> LightColorScheme
         "HIGH_CONTRAST_DARK" -> HighContrastDarkColorScheme
         "HIGH_CONTRAST_LIGHT" -> HighContrastLightColorScheme
@@ -196,6 +163,7 @@ fun MyApplicationTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = AppShapes,
         content = content
     )
 }

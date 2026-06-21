@@ -67,37 +67,4 @@ val HighContrastLightOutline = Color.Black
 val HighContrastLightError = Color(0xFFD32F2F)
 val HighContrastLightOnError = Color.White
 
-// ========================================================================
-// GLASS / FROSTED THEME COLORS — translucent, light, and airy
-// ========================================================================
-val GlassLightBg = Color(0xFFE8F0FE)               // Blue-tinted white
-val GlassLightSurface = Color(0xB3FFFFFF)           // Transparent white (70%)
-val GlassLightSurfaceVariant = Color(0x80E8F0FE)    // Frosted blue (50%)
-val GlassLightCardBg = Color(0xCCFFFFFF)            // Frosted glass card (80%)
-val GlassLightPrimary = Color(0xFF4A90D9)           // Soft blue
-val GlassLightOnPrimary = Color.White
-val GlassLightPrimaryContainer = Color(0x4D4A90D9)  // Translucent primary
-val GlassLightOnPrimaryContainer = Color(0xFF4A90D9)
-val GlassLightSecondary = Color(0xFF7C4DFF)         // Soft purple accent
-val GlassLightOnSecondary = Color.White
-val GlassLightText = Color(0xFF1A1A2E)              // Dark navy text
-val GlassLightTextSecondary = Color(0x993C4042)     // Muted translucent text
-val GlassLightOutline = Color(0x4DB0BEC5)           // Subtle frosted border
-val GlassLightError = Color(0xFFE57373)
-val GlassLightOnError = Color.White
 
-val GlassDarkBg = Color(0xFF0F1923)                  // Deep navy
-val GlassDarkSurface = Color(0x990A1628)             // Transparent dark navy (60%)
-val GlassDarkSurfaceVariant = Color(0x801A2A4A)      // Frosted darker blue (50%)
-val GlassDarkCardBg = Color(0xCC1A1A2E)              // Frosted dark card (80%)
-val GlassDarkPrimary = Color(0xFF64B5F6)             // Bright soft blue
-val GlassDarkOnPrimary = Color(0xFF0D47A1)
-val GlassDarkPrimaryContainer = Color(0x4D1565C0)    // Translucent darker blue
-val GlassDarkOnPrimaryContainer = Color(0xFF64B5F6)
-val GlassDarkSecondary = Color(0xFFB39DDB)           // Soft muted purple
-val GlassDarkOnSecondary = Color(0xFF1A1A2E)
-val GlassDarkText = Color(0xFFE8F0FE)                // Blue-tinted white text
-val GlassDarkTextSecondary = Color(0x99B0BEC5)       // Muted blue-grey text
-val GlassDarkOutline = Color(0x4D4A90D9)             // Frosted blue border
-val GlassDarkError = Color(0xFFEF9A9A)
-val GlassDarkOnError = Color(0xFF5D0000)

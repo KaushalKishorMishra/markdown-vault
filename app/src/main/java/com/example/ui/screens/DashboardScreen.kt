@@ -2397,8 +2397,6 @@ fun SettingsScreen(
                         "CYBERPUNK" to "Neon Cyber",
                         "EMERALD" to "Sage Forest",
                         "CLASSIC" to "Warm Amber",
-                        "GLASS_LIGHT" to "Glass Light",
-                        "GLASS_DARK" to "Glass Dark",
                         "LIGHT" to "Lavender Light",
                         "HIGH_CONTRAST_DARK" to "High Contrast Dark",
                         "HIGH_CONTRAST_LIGHT" to "High Contrast Light"
