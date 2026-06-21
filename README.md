@@ -1,6 +1,125 @@
 # Markdown Vault
 
-A secure, local-first Markdown editor with automatic GitHub synchronization, Obsidian/Logseq vault compatibility, LaTeX, and Mermaid.js support.
+A secure, local-first Markdown editor with automatic GitHub synchronization, Obsidian/Logseq vault compatibility, LaTeX math rendering, and Mermaid.js diagram support.
+
+---
+
+## Feature Showcase
+
+### Splash Screen
+<img src="screenshots/01-splash.png" width="280" alt="Splash Screen" />
+
+Animated splash with spring/tween animations — logo scales in, brand text fades up, then auto-navigates to the dashboard.
+
+---
+
+### Dashboard & File Explorer
+| Dashboard (Root) | Folder Contents | Sidebar Navigation |
+|:---:|:---:|:---:|
+| <img src="screenshots/02-dashboard.png" width="240" alt="Dashboard" /> | <img src="screenshots/03-explorer-folder.png" width="240" alt="Folder Explorer" /> | <img src="screenshots/10-sidebar.png" width="240" alt="Sidebar" /> |
+
+- **Adaptive layout** — phone uses a drawer sidebar (swipe gesture), tablet shows a persistent 320dp panel
+- **Breadcrumb navigation** — clickable path segments with up-navigation
+- **Folder & file management** — create, rename, delete folders and files with context menus
+- **Sync status indicators** — color-coded dots: green (synced), purple (modified), amber (conflict)
+- **Search** — toggle search panel, results highlighted in file titles
+
+---
+
+### Markdown Editor
+| Preview Mode | Edit Mode | Editor with Stats |
+|:---:|:---:|:---:|
+| <img src="screenshots/05-preview.png" width="240" alt="Preview" /> | <img src="screenshots/04-editor.png" width="240" alt="Editor" /> | <img src="screenshots/06-math-assistant.png" width="240" alt="Math Assistant" /> |
+
+- **Preview / Edit toggle** — phone: animated crossfade; tablet: side-by-side split view
+- **Formatting toolbar** — bold, italic, strikethrough, lists, blockquotes, inline/code blocks, links, images, horizontal rules, and heading dropdown (H1–H6)
+- **Reading statistics** — word count, character count, estimated reading time
+- **WebView-based rendering** — powered by **marked.js**, **KaTeX**, and **Mermaid.js**
+- **High contrast mode** — toggleable for accessibility (black/white/cyan)
+
+---
+
+### LaTeX Math Assistant
+<img src="screenshots/06-math-assistant.png" width="280" alt="Math Assistant" />
+
+- **Live equation preview** — detects `$...$` (inline) and `$$...$$` (block) at cursor
+- **Quick-add templates**: Quadratic Formula, Euler's Identity, Pythagoras, Normal Distribution, Fourier Transform, Maxwell's Equation
+- Rendered via **KaTeX** in a dedicated `MathView` WebView
+
+---
+
+### Mermaid Diagram Assistant
+<img src="screenshots/07-mermaid-assistant.png" width="280" alt="Mermaid Assistant" />
+
+- **Live diagram preview** — detects ` ```mermaid ` blocks at cursor
+- **Quick-add templates**: Flowchart, Sequence Diagram, State Diagram, Gantt Chart, User Journey
+- Theme-matched dark styling with inline error display
+
+---
+
+### FAB Menu
+<img src="screenshots/14-fab-expanded.png" width="280" alt="FAB Expanded" />
+
+Expandable floating action button with "Create Folder" and "Create Note" options.
+
+---
+
+### Search
+<img src="screenshots/15-search.png" width="280" alt="Search" />
+
+Search files and folders by name with highlighted match indicators in file titles.
+
+---
+
+### Settings & Configuration
+| Vault Management | Theme Selection | GitHub Auth & Trash |
+|:---:|:---:|:---:|
+| <img src="screenshots/11-settings.png" width="240" alt="Settings" /> | <img src="screenshots/12-themes.png" width="240" alt="Themes" /> | <img src="screenshots/13-github-auth.png" width="240" alt="GitHub Auth" /> |
+
+#### Vault Workspaces
+- Create, switch, and delete vaults
+- Three vault types: **OBSIDIAN** (standard folders), **LOGSEQ** (pages/journals), **BASIC** (flat)
+
+#### Color Themes (7 total)
+| Theme | Description |
+|-------|-------------|
+| **Artistic Dark** | Default — dark charcoal with lavender/purple accents |
+| **Light** | Soft lavender cream |
+| **Neon Cyber** | Neon cyan/pink on pure black |
+| **Sage Forest** | Emerald green on forest charcoal |
+| **Warm Amber** | Amber/gold on chocolate-grey |
+| **High Contrast Dark** | Black/white/cyan for accessibility |
+| **High Contrast Light** | White/black/blue for accessibility |
+
+Custom Material3 shape system — rounded corners at 4dp–24dp.
+
+#### GitHub Authentication
+- Username + Personal Access Token (PAT) with password masking
+- Test connection button to verify credentials
+- Credentials encrypted via **Android Keystore** (AES/GCM/NoPadding)
+
+#### Auto Background Sync
+- Periodic sync every 15 minutes (WorkManager)
+- Network-connected constraint
+- Bi-directional sync algorithm: push local changes, pull remote updates, handle conflicts
+
+#### Recently Deleted (Trash Bin)
+- Notes moved to trash with 30-day countdown
+- Restore or permanently delete
+- Auto-cleanup after 30 days
+
+---
+
+### Data Layer
+
+| Component | Technology |
+|-----------|-----------|
+| Local Database | **Room** (SQLite) |
+| Encryption | **Android Keystore** — AES/GCM/NoPadding |
+| Remote Sync | **Retrofit + Moshi** — GitHub REST API |
+| Background Sync | **WorkManager** — periodic 15-min sync |
+| File Storage | Device filesystem (`filesDir/vaults/`) — compatible with Obsidian & Logseq |
+| HTTP Client | **OkHttp** with 30s timeout and body-level logging |
 
 ---
 
@@ -10,7 +129,7 @@ To build and run this Android project, your development machine needs the follow
 
 ### 1. Java Development Kit (JDK)
 * **Requirement**: JDK 17 (or newer). OpenJDK 17 is recommended.
-* **Installation (macOS)**: 
+* **Installation (macOS)**:
   ```bash
   brew install openjdk@17
   ```
@@ -102,3 +221,19 @@ To generate signed release APKs in GitHub Actions, configure the following secre
 3. **`RELEASE_KEY_PASSWORD`**: Password to access the specific key alias.
 4. **`GEMINI_API_KEY`**: Your production API Key (will be packaged securely using the Secrets Gradle Plugin).
 
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **UI** | Jetpack Compose + Material3 |
+| **Database** | Room (SQLite) with KSP |
+| **API Client** | Retrofit 2 + Moshi + OkHttp |
+| **Background Sync** | WorkManager (15-min periodic) |
+| **Image Loading** | Coil (AsyncImage) |
+| **Markdown Rendering** | marked.js + KaTeX + Mermaid.js (WebView) |
+| **Encryption** | Android Keystore (AES/GCM) |
+| **Themes** | 7 color schemes with Material3 dynamic shapes |
+| **CI/CD** | GitHub Actions (auto build, version bump, release) |
+| **AI** | Firebase AI integration |
