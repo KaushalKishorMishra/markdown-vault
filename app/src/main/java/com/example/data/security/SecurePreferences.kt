@@ -133,6 +133,58 @@ class SecurePreferences(private val context: Context) {
         return sharedPrefs.getString("selected_theme", "ARTISTIC") ?: "ARTISTIC"
     }
 
+    fun saveAiProvider(provider: String) {
+        sharedPrefs.edit().putString("ai_provider", provider).apply()
+    }
+
+    fun getAiProvider(): String {
+        return sharedPrefs.getString("ai_provider", "GEMINI") ?: "GEMINI"
+    }
+
+    fun saveGeminiApiKey(key: String) {
+        val encrypted = encrypt(key)
+        sharedPrefs.edit().putString("gemini_api_key", encrypted).apply()
+    }
+
+    fun getGeminiApiKey(): String {
+        val encrypted = sharedPrefs.getString("gemini_api_key", "") ?: ""
+        return decrypt(encrypted)
+    }
+
+    fun saveOpenRouterApiKey(key: String) {
+        val encrypted = encrypt(key)
+        sharedPrefs.edit().putString("openrouter_api_key", encrypted).apply()
+    }
+
+    fun getOpenRouterApiKey(): String {
+        val encrypted = sharedPrefs.getString("openrouter_api_key", "") ?: ""
+        return decrypt(encrypted)
+    }
+
+    fun saveOpenRouterModel(model: String) {
+        sharedPrefs.edit().putString("openrouter_model", model).apply()
+    }
+
+    fun getOpenRouterModel(): String {
+        return sharedPrefs.getString("openrouter_model", "google/gemini-2.5-flash") ?: "google/gemini-2.5-flash"
+    }
+
+    fun saveOllamaEndpoint(endpoint: String) {
+        sharedPrefs.edit().putString("ollama_endpoint", endpoint).apply()
+    }
+
+    fun getOllamaEndpoint(): String {
+        return sharedPrefs.getString("ollama_endpoint", "http://localhost:11434") ?: "http://localhost:11434"
+    }
+
+    fun saveOllamaModel(model: String) {
+        sharedPrefs.edit().putString("ollama_model", model).apply()
+    }
+
+    fun getOllamaModel(): String {
+        return sharedPrefs.getString("ollama_model", "llama3") ?: "llama3"
+    }
+
     fun clear() {
         sharedPrefs.edit().clear().apply()
     }

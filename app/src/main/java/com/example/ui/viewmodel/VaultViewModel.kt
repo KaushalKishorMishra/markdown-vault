@@ -591,6 +591,37 @@ ${'$'}${'$'}\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}${'$'}${'$'}"""
         selectedTheme.value = theme
     }
 
+    // AI Configuration State Flows
+    val aiProvider = MutableStateFlow(securePrefs.getAiProvider())
+    val geminiApiKey = MutableStateFlow(securePrefs.getGeminiApiKey())
+    val openRouterApiKey = MutableStateFlow(securePrefs.getOpenRouterApiKey())
+    val openRouterModel = MutableStateFlow(securePrefs.getOpenRouterModel())
+    val ollamaEndpoint = MutableStateFlow(securePrefs.getOllamaEndpoint())
+    val ollamaModel = MutableStateFlow(securePrefs.getOllamaModel())
+
+    fun updateAiSettings(
+        provider: String,
+        geminiKey: String,
+        openRouterKey: String,
+        orModel: String,
+        ollamaUrl: String,
+        ollamaModelName: String
+    ) {
+        securePrefs.saveAiProvider(provider)
+        securePrefs.saveGeminiApiKey(geminiKey)
+        securePrefs.saveOpenRouterApiKey(openRouterKey)
+        securePrefs.saveOpenRouterModel(orModel)
+        securePrefs.saveOllamaEndpoint(ollamaUrl)
+        securePrefs.saveOllamaModel(ollamaModelName)
+
+        aiProvider.value = provider
+        geminiApiKey.value = geminiKey
+        openRouterApiKey.value = openRouterKey
+        openRouterModel.value = orModel
+        ollamaEndpoint.value = ollamaUrl
+        ollamaModel.value = ollamaModelName
+    }
+
     fun triggerSync() {
         val vault = _activeVault.value ?: return
         viewModelScope.launch {

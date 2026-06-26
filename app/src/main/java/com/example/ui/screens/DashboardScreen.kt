@@ -2030,6 +2030,20 @@ fun SettingsScreen(
     var connectionStatus by remember { mutableStateOf(if (currentToken.isNotEmpty()) "Configured" else "Unconfigured") }
     var isChecking by remember { mutableStateOf(false) }
 
+    val aiProviderState by viewModel.aiProvider.collectAsStateWithLifecycle()
+    val geminiApiKeyState by viewModel.geminiApiKey.collectAsStateWithLifecycle()
+    val openRouterApiKeyState by viewModel.openRouterApiKey.collectAsStateWithLifecycle()
+    val openRouterModelState by viewModel.openRouterModel.collectAsStateWithLifecycle()
+    val ollamaEndpointState by viewModel.ollamaEndpoint.collectAsStateWithLifecycle()
+    val ollamaModelState by viewModel.ollamaModel.collectAsStateWithLifecycle()
+
+    var aiProvider by remember(aiProviderState) { mutableStateOf(aiProviderState) }
+    var geminiApiKeyInput by remember(geminiApiKeyState) { mutableStateOf(geminiApiKeyState) }
+    var openRouterApiKeyInput by remember(openRouterApiKeyState) { mutableStateOf(openRouterApiKeyState) }
+    var openRouterModelInput by remember(openRouterModelState) { mutableStateOf(openRouterModelState) }
+    var ollamaEndpointInput by remember(ollamaEndpointState) { mutableStateOf(ollamaEndpointState) }
+    var ollamaModelInput by remember(ollamaModelState) { mutableStateOf(ollamaModelState) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2547,6 +2561,158 @@ fun SettingsScreen(
             }
         }
 
+        // AI Configuration Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "AI Assistant Settings".uppercase(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    letterSpacing = 1.sp
+                )
+
+                // Provider Selection Row
+                Text(
+                    text = "Active LLM Provider",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val providers = listOf(
+                        "GEMINI" to "Gemini",
+                        "OPENROUTER" to "OpenRouter",
+                        "OLLAMA" to "Ollama"
+                    )
+                    providers.forEach { (key, label) ->
+                        val isSelected = aiProvider == key
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable { aiProvider = key }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Provider-Specific Configuration Fields
+                when (aiProvider) {
+                    "GEMINI" -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Gemini Settings",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = geminiApiKeyInput,
+                                onValueChange = { geminiApiKeyInput = it },
+                                label = { Text("Gemini API Key (Optional)") },
+                                placeholder = { Text("Fallback to project default key") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = "Leave blank to use the pre-configured GEMINI_API_KEY from .env.",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                    "OPENROUTER" -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "OpenRouter Settings",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = openRouterApiKeyInput,
+                                onValueChange = { openRouterApiKeyInput = it },
+                                label = { Text("OpenRouter API Key") },
+                                placeholder = { Text("sk-or-v1-...") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = openRouterModelInput,
+                                onValueChange = { openRouterModelInput = it },
+                                label = { Text("Model ID") },
+                                placeholder = { Text("e.g. google/gemini-2.5-flash") },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = "Free models to try:\n- google/gemini-2.5-flash:free\n- meta-llama/llama-3-8b-instruct:free\n- mistralai/mistral-7b-instruct:free",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                    "OLLAMA" -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Ollama Settings",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = ollamaEndpointInput,
+                                onValueChange = { ollamaEndpointInput = it },
+                                label = { Text("Ollama API Endpoint URL") },
+                                placeholder = { Text("e.g. http://localhost:11434") },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = ollamaModelInput,
+                                onValueChange = { ollamaModelInput = it },
+                                label = { Text("Model Name") },
+                                placeholder = { Text("e.g. llama3") },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Save & Reset Action Section
         Row(
             modifier = Modifier
@@ -2565,7 +2731,17 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(16.dp))
             }
             Button(
-                onClick = { onConfirm(user, token) },
+                onClick = {
+                    onConfirm(user, token)
+                    viewModel.updateAiSettings(
+                        aiProvider,
+                        geminiApiKeyInput,
+                        openRouterApiKeyInput,
+                        openRouterModelInput,
+                        ollamaEndpointInput,
+                        ollamaModelInput
+                    )
+                },
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text("Save Changes", fontSize = 13.sp)
