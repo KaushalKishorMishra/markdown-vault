@@ -220,6 +220,7 @@ fun DashboardScreen(
     var showSyncConfirmationDialog by remember { mutableStateOf(false) }
     var showSearchPanel by remember { mutableStateOf(false) }
     var showDeleteNoteDialog by remember { mutableStateOf(false) }
+    var showAiAssistant by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
 
     // Screen reader announcements for sync state changes
@@ -381,6 +382,17 @@ fun DashboardScreen(
                             if (showSettingsScreen) {
                                 // No actions on settings screen
                             } else if (selectedNote != null) {
+                                // AI Assistant
+                                IconButton(
+                                    onClick = { showAiAssistant = true },
+                                    modifier = Modifier.minimumTouchTarget()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = "AI Note Assistant",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                                 // Delete Note
                                 IconButton(
                                     onClick = { showDeleteNoteDialog = true },
@@ -843,6 +855,14 @@ fun DashboardScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    if (showAiAssistant && selectedNote != null) {
+        com.example.ui.components.AiAssistantBottomSheet(
+            note = selectedNote!!,
+            onDismiss = { showAiAssistant = false },
+            onUpdateContent = { viewModel.updateSelectedNoteContent(it) }
         )
     }
 }
