@@ -166,7 +166,7 @@ class SecurePreferences(private val context: Context) {
     }
 
     fun getOpenRouterModel(): String {
-        return sharedPrefs.getString("openrouter_model", "google/gemini-2.5-flash") ?: "google/gemini-2.5-flash"
+        return sharedPrefs.getString("openrouter_model", "openrouter/free") ?: "openrouter/free"
     }
 
     fun saveOllamaEndpoint(endpoint: String) {

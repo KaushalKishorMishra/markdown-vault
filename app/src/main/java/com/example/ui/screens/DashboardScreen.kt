@@ -2668,6 +2668,7 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             val freeOpenRouterModels = listOf(
+                                "openrouter/free" to "OpenRouter Free Router (Auto-selects free model) - Recommended",
                                 "liquid/lfm-2.5-1.2b-instruct:free" to "Liquid LFM 2.5 1.2B (Instruct) - Free (Verified)",
                                 "liquid/lfm-2.5-1.2b-thinking:free" to "Liquid LFM 2.5 1.2B (Thinking) - Free (Verified)",
                                 "cohere/north-mini-code:free" to "Cohere North Mini Code - Free (Verified)",
