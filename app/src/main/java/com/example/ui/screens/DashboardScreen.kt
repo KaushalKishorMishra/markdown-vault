@@ -2667,20 +2667,78 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            OutlinedTextField(
-                                value = openRouterModelInput,
-                                onValueChange = { openRouterModelInput = it },
-                                label = { Text("Model ID") },
-                                placeholder = { Text("e.g. google/gemini-2.5-flash") },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
+                            val freeOpenRouterModels = listOf(
+                                "liquid/lfm-2.5-1.2b-instruct:free" to "Liquid LFM 2.5 1.2B (Instruct) - Free",
+                                "meta-llama/llama-3.2-3b-instruct:free" to "Llama 3.2 3B (Instruct) - Free",
+                                "meta-llama/llama-3.3-70b-instruct:free" to "Llama 3.3 70B (Instruct) - Free",
+                                "nvidia/nemotron-3-ultra-550b-a55b:free" to "Nemotron 3 Ultra 550B - Free",
+                                "nvidia/nemotron-3-nano-30b-a3b:free" to "Nemotron 3 Nano 30B - Free",
+                                "nousresearch/hermes-3-llama-3.1-405b:free" to "Hermes 3 Llama 3.1 405B - Free",
+                                "cohere/north-mini-code:free" to "Cohere North Mini Code - Free",
+                                "qwen/qwen3-coder:free" to "Qwen 3 Coder - Free",
+                                "cognitivecomputations/dolphin-mistral-24b-venice-edition:free" to "Dolphin Mistral 24B - Free",
+                                "custom" to "Custom (type manually)"
                             )
+
+                            var expandedDropdown by remember { mutableStateOf(false) }
+                            val selectedDropdownPair = freeOpenRouterModels.find { it.first == openRouterModelInput }
+                                ?: ("custom" to "Custom (type manually)")
+                            var dropdownLabel by remember(selectedDropdownPair) { mutableStateOf(selectedDropdownPair.second) }
+
                             Text(
-                                text = "Free models to try:\n- google/gemini-2.5-flash:free\n- meta-llama/llama-3-8b-instruct:free\n- mistralai/mistral-7b-instruct:free",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                lineHeight = 14.sp
+                                text = "Select Model ID",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+
+                            ExposedDropdownMenuBox(
+                                expanded = expandedDropdown,
+                                onExpandedChange = { expandedDropdown = !expandedDropdown }
+                            ) {
+                                OutlinedTextField(
+                                    readOnly = true,
+                                    value = dropdownLabel,
+                                    onValueChange = {},
+                                    label = { Text("Model Preset") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDropdown) },
+                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor()
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expandedDropdown,
+                                    onDismissRequest = { expandedDropdown = false }
+                                ) {
+                                    freeOpenRouterModels.forEach { (modelId, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            onClick = {
+                                                if (modelId != "custom") {
+                                                    openRouterModelInput = modelId
+                                                } else if (openRouterModelInput == selectedDropdownPair.first && selectedDropdownPair.first != "custom") {
+                                                    openRouterModelInput = ""
+                                                }
+                                                dropdownLabel = label
+                                                expandedDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (selectedDropdownPair.first == "custom") {
+                                OutlinedTextField(
+                                    value = openRouterModelInput,
+                                    onValueChange = { openRouterModelInput = it },
+                                    label = { Text("Custom Model ID") },
+                                    placeholder = { Text("e.g. google/gemini-2.5-flash") },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                     "OLLAMA" -> {
