@@ -2668,15 +2668,18 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             val freeOpenRouterModels = listOf(
-                                "liquid/lfm-2.5-1.2b-instruct:free" to "Liquid LFM 2.5 1.2B (Instruct) - Free",
-                                "meta-llama/llama-3.2-3b-instruct:free" to "Llama 3.2 3B (Instruct) - Free",
-                                "meta-llama/llama-3.3-70b-instruct:free" to "Llama 3.3 70B (Instruct) - Free",
-                                "nvidia/nemotron-3-ultra-550b-a55b:free" to "Nemotron 3 Ultra 550B - Free",
-                                "nvidia/nemotron-3-nano-30b-a3b:free" to "Nemotron 3 Nano 30B - Free",
-                                "nousresearch/hermes-3-llama-3.1-405b:free" to "Hermes 3 Llama 3.1 405B - Free",
-                                "cohere/north-mini-code:free" to "Cohere North Mini Code - Free",
-                                "qwen/qwen3-coder:free" to "Qwen 3 Coder - Free",
-                                "cognitivecomputations/dolphin-mistral-24b-venice-edition:free" to "Dolphin Mistral 24B - Free",
+                                "liquid/lfm-2.5-1.2b-instruct:free" to "Liquid LFM 2.5 1.2B (Instruct) - Free (Verified)",
+                                "liquid/lfm-2.5-1.2b-thinking:free" to "Liquid LFM 2.5 1.2B (Thinking) - Free (Verified)",
+                                "cohere/north-mini-code:free" to "Cohere North Mini Code - Free (Verified)",
+                                "google/gemma-4-26b-a4b-it:free" to "Gemma 4 26B (Instruct) - Free (Verified)",
+                                "google/gemma-4-31b-it:free" to "Gemma 4 31B (Instruct) - Free (Verified)",
+                                "meta-llama/llama-3.2-3b-instruct:free" to "Llama 3.2 3B (Instruct) - Free (Rate-limited)",
+                                "meta-llama/llama-3.3-70b-instruct:free" to "Llama 3.3 70B (Instruct) - Free (Rate-limited)",
+                                "nvidia/nemotron-3-ultra-550b-a55b:free" to "Nemotron 3 Ultra 550B - Free (Guardrail block)",
+                                "nvidia/nemotron-3-nano-30b-a3b:free" to "Nemotron 3 Nano 30B - Free (Guardrail block)",
+                                "nousresearch/hermes-3-llama-3.1-405b:free" to "Hermes 3 Llama 3.1 405B - Free (Rate-limited)",
+                                "qwen/qwen3-coder:free" to "Qwen 3 Coder - Free (Rate-limited)",
+                                "cognitivecomputations/dolphin-mistral-24b-venice-edition:free" to "Dolphin Mistral 24B - Free (Rate-limited)",
                                 "custom" to "Custom (type manually)"
                             )
 
