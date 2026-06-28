@@ -41,6 +41,9 @@ fun MarkdownPreview(
             <!-- Marked.js for markdown rendering -->
             <script src="https://cdn.jsdelivr.net/npm/marked@5.1.2/marked.min.js"></script>
 
+            <!-- DOMPurify for HTML sanitization -->
+            <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+
             <style>
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -186,7 +189,7 @@ fun MarkdownPreview(
                 mermaid.initialize({
                     startOnLoad: false,
                     theme: 'dark',
-                    securityLevel: 'loose',
+                    securityLevel: 'strict',
                     themeVariables: {
                         background: '#2B2930',
                         primaryColor: '#D0BCFF',
@@ -202,7 +205,7 @@ fun MarkdownPreview(
                         // Render standard markdown via marked.js
                         var renderedHtml = marked.parse(rawMarkdown);
                         var contentDiv = document.getElementById('content');
-                        contentDiv.innerHTML = renderedHtml;
+                        contentDiv.innerHTML = DOMPurify.sanitize(renderedHtml);
 
                         // Accessibility: Add alt text to images without alt attribute
                         var images = contentDiv.querySelectorAll('img:not([alt])');
@@ -288,7 +291,8 @@ fun MarkdownPreview(
                         }
 
                     } catch (e) {
-                        document.getElementById('content').innerHTML = "<div role='alert' style='color: #FFFFFF; background-color: #D32F2F; padding: 16px; border-radius: 8px; font-weight: bold;'><b>Rendering Error:</b> " + e.message + "</div>";
+                        var cleanMsg = DOMPurify.sanitize(e.message);
+                        document.getElementById('content').innerHTML = "<div role='alert' style='color: #FFFFFF; background-color: #D32F2F; padding: 16px; border-radius: 8px; font-weight: bold;'><b>Rendering Error:</b> " + cleanMsg + "</div>";
                     }
                 }
 
@@ -313,7 +317,8 @@ fun MarkdownPreview(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    allowFileAccess = true
+                    allowFileAccess = false
+                    allowContentAccess = false
                     builtInZoomControls = true
                     displayZoomControls = false
                     textZoom = 100
